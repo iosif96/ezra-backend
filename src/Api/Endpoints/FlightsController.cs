@@ -6,6 +6,7 @@ using CreateFlight = Application.Features.Flights.CreateFlight;
 using DeleteFlight = Application.Features.Flights.DeleteFlight;
 using GetFlight = Application.Features.Flights.GetFlight;
 using GetFlightsWithPagination = Application.Features.Flights.GetFlightsWithPagination;
+using SyncFlights = Application.Features.Flights.SyncFlights;
 using UpdateFlight = Application.Features.Flights.UpdateFlight;
 
 namespace Api.Endpoints;
@@ -48,5 +49,11 @@ public class FlightsController : ApiControllerBase
         await Mediator.Send(new DeleteFlight.DeleteFlightCommand(id));
 
         return NoContent();
+    }
+
+    [HttpPost("sync/{airportId}")]
+    public async Task<ActionResult<SyncFlights.SyncFlightsResponse>> Sync(int airportId)
+    {
+        return await Mediator.Send(new SyncFlights.SyncFlightsCommand(airportId));
     }
 }

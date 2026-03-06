@@ -1,5 +1,6 @@
 ﻿using System.Reflection;
 
+using Application.Common.Configuration;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.BlobStorage;
 using Application.Common.Models.BlobStorage;
@@ -7,6 +8,7 @@ using Application.Infrastructure.Files;
 using Application.Infrastructure.Persistence;
 using Application.Infrastructure.Persistence.Interceptors;
 using Application.Infrastructure.Services;
+using Application.Infrastructure.Services.AviationStack;
 using Application.Infrastructure.Services.BlobStorage;
 
 using Ardalis.GuardClauses;
@@ -44,6 +46,7 @@ public static class ConfigureServices
         });
 
         services.Configure<AzureStorageOptions>(configuration.GetSection(AzureStorageOptions.AzureStorage));
+        services.Configure<AviationStackConfiguration>(configuration.GetSection(AviationStackConfiguration.SectionName));
 
         services.AddScoped<ApplicationDbContextInitialiser>();
 
@@ -62,6 +65,8 @@ public static class ConfigureServices
         services.AddScoped<IPasswordResetService, PasswordResetService>();
 
         services.AddSingleton<ITokenService, TokenService>();
+
+        services.AddHttpClient<IAviationStackService, AviationStackService>();
 
         services.AddSingleton<IDateTime, DateTimeService>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
