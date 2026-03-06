@@ -7,9 +7,13 @@ using Application.Common.Models.BlobStorage;
 using Application.Infrastructure.Files;
 using Application.Infrastructure.Persistence;
 using Application.Infrastructure.Persistence.Interceptors;
+using Application.Features.Chats;
+using Application.Features.Chats.Tools;
 using Application.Infrastructure.Services;
 using Application.Infrastructure.Services.AviationStack;
 using Application.Infrastructure.Services.BlobStorage;
+using Application.Infrastructure.Services.Claude;
+using Application.Infrastructure.Services.WhatsApp;
 
 using Ardalis.GuardClauses;
 
@@ -70,6 +74,12 @@ public static class ConfigureServices
 
         services.AddSingleton<IDateTime, DateTimeService>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+
+        // Chat / LLM
+        services.AddHttpClient<IChatCompletionService, ClaudeCompletionService>();
+        services.AddHttpClient<IMessagingChannel, WhatsAppChannel>();
+        services.AddScoped<ChatPromptBuilder>();
+        services.AddScoped<IChatTool, CreateRequestTool>();
 
         return services;
     }
