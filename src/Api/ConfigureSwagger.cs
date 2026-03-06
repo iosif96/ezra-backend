@@ -15,6 +15,8 @@ public static class ConfigureSwagger
         {
             c.SwaggerDoc("v1", new OpenApiInfo { Title = "Core API", Version = "v1" });
 
+            c.CustomSchemaIds(type => type.FullName?.Replace("+", "."));
+
             var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
             var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
             c.IncludeXmlComments(xmlPath);
