@@ -5,6 +5,8 @@ using Application.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Logging.AddAzureWebAppDiagnostics();
+
 // Register the Swagger generator, defining 1 or more Swagger documents
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddSwaggerOpenAPI();
