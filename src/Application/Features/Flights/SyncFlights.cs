@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Features.Flights.SyncFlights;
 
-public record SyncFlightsResponse(int Created, int Updated);
+public record SyncFlightsResponse(int Created, int Updated, int Skipped);
 
 [Authorize]
 public record SyncFlightsCommand(int AirportId) : IRequest<SyncFlightsResponse>;
@@ -24,130 +24,206 @@ internal sealed class SyncFlightsCommandHandler(
     public async Task<SyncFlightsResponse> Handle(SyncFlightsCommand request, CancellationToken cancellationToken)
     {
         var airport = await context.Airports
+            .AsNoTracking()
             .FirstOrDefaultAsync(a => a.Id == request.AirportId, cancellationToken)
             ?? throw new NotFoundException(nameof(Airport), request.AirportId);
 
+        // Fetch today + tomorrow, departures + arrivals from AviationStack
         var today = DateOnly.FromDateTime(dateTime.Now);
         var tomorrow = today.AddDays(1);
 
-        var todayFlights = await aviationStack.GetFlightsAsync(airport.IataCode, today, cancellationToken);
-        var tomorrowFlights = await aviationStack.GetFlightsAsync(airport.IataCode, tomorrow, cancellationToken);
+        var fetched = new List<(AviationStackFlight Flight, MovementType Direction)>();
 
-        var allFlights = todayFlights.Concat(tomorrowFlights).ToList();
+        foreach (var date in new[] { today, tomorrow })
+        {
+            foreach (var direction in new[] { MovementType.Departure, MovementType.Arrival })
+            {
+                var flights = await aviationStack.GetFlightsAsync(airport.IataCode, date, direction, cancellationToken);
+                fetched.AddRange(flights.Select(f => (f, direction)));
+            }
+        }
 
-        logger.LogInformation("Syncing {Count} flights for airport {Airport}", allFlights.Count, airport.IataCode);
+        // A flight can appear in both dep and arr queries — deduplicate and merge movements
+        var parsed = fetched
+            .Select(f => ParseFlight(f.Flight, f.Direction))
+            .Where(f => f != null)
+            .GroupBy(f => (f!.FlightNumber, f.FlightDate))
+            .Select(g => MergeParsed(g!))
+            .ToList();
+
+        logger.LogInformation("Syncing {Count} unique flights for airport {Airport}", parsed.Count, airport.IataCode);
+
+        // Batch-load existing flights to avoid N+1 queries
+        var flightNumbers = parsed.Select(p => p.FlightNumber).Distinct().ToList();
+        var dates = parsed.Select(p => p.FlightDate).Distinct().ToList();
+
+        var existingLookup = (await context.Flights
+            .Include(f => f.Movements)
+            .Where(f => flightNumbers.Contains(f.Number) && dates.Contains(f.Date))
+            .ToListAsync(cancellationToken))
+            .ToDictionary(f => (f.Number, f.Date));
 
         var created = 0;
         var updated = 0;
+        var skipped = 0;
 
-        foreach (var avFlight in allFlights)
+        foreach (var p in parsed)
         {
-            var flightNumber = avFlight.Flight.Iata ?? avFlight.Flight.Icao ?? avFlight.Flight.Number;
-            if (string.IsNullOrWhiteSpace(flightNumber))
-                continue;
-
-            if (!DateOnly.TryParse(avFlight.FlightDate, out var flightDate))
-                continue;
-
-            var existing = await context.Flights
-                .Include(f => f.Movements)
-                .FirstOrDefaultAsync(f => f.Number == flightNumber && f.Date == flightDate, cancellationToken);
-
-            if (existing == null)
+            if (existingLookup.TryGetValue((p.FlightNumber, p.FlightDate), out var existing))
             {
-                var flight = CreateFlight(avFlight, flightNumber, flightDate);
-                context.Flights.Add(flight);
-
-                AddMovements(flight, avFlight, airport.Id);
-                created++;
+                ApplyUpdate(existing, p);
+                UpsertMovement(existing, p, airport.Id);
+                updated++;
             }
             else
             {
-                UpdateFlight(existing, avFlight);
-                UpdateMovements(existing, avFlight, airport.Id);
-                updated++;
+                var flight = CreateFlight(p);
+                AddMovement(flight, p, airport.Id);
+                context.Flights.Add(flight);
+                created++;
             }
         }
 
         await context.SaveChangesAsync(cancellationToken);
 
-        logger.LogInformation("Sync complete for {Airport}: {Created} created, {Updated} updated", airport.IataCode, created, updated);
+        logger.LogInformation(
+            "Sync complete for {Airport}: {Created} created, {Updated} updated, {Skipped} skipped",
+            airport.IataCode, created, updated, skipped);
 
-        return new SyncFlightsResponse(created, updated);
+        return new SyncFlightsResponse(created, updated, skipped);
     }
 
-    private static Flight CreateFlight(AviationStackFlight av, string flightNumber, DateOnly flightDate)
+    private sealed class ParsedFlight
     {
-        return new Flight
+        public required string FlightNumber { get; init; }
+        public required DateOnly FlightDate { get; init; }
+        public string IataCode { get; set; } = string.Empty;
+        public string IcaoCode { get; set; } = string.Empty;
+        public string Airline { get; set; } = string.Empty;
+        public FlightStatus Status { get; set; } = FlightStatus.Unknown;
+        public AviationStackMovement? DepartureData { get; set; }
+        public AviationStackMovement? ArrivalData { get; set; }
+    }
+
+    private static ParsedFlight? ParseFlight(AviationStackFlight av, MovementType direction)
+    {
+        var flightNumber = av.Flight.Iata ?? av.Flight.Icao ?? av.Flight.Number;
+        if (string.IsNullOrWhiteSpace(flightNumber))
+            return null;
+
+        if (!DateOnly.TryParse(av.FlightDate, out var flightDate))
+            return null;
+
+        var parsed = new ParsedFlight
         {
-            Date = flightDate,
-            Number = flightNumber,
+            FlightNumber = flightNumber,
+            FlightDate = flightDate,
             IataCode = av.Flight.Iata ?? string.Empty,
             IcaoCode = av.Flight.Icao ?? string.Empty,
             Airline = av.Airline.Name ?? string.Empty,
             Status = MapStatus(av.FlightStatus),
+        };
+
+        // Only attach the movement that belongs to the queried airport direction
+        if (direction == MovementType.Departure)
+            parsed.DepartureData = av.Departure;
+        else
+            parsed.ArrivalData = av.Arrival;
+
+        return parsed;
+    }
+
+    private static ParsedFlight MergeParsed(IGrouping<(string, DateOnly), ParsedFlight?> group)
+    {
+        var items = group.Where(x => x != null).ToList();
+        var first = items.First()!;
+
+        foreach (var other in items.Skip(1))
+        {
+            first.DepartureData ??= other!.DepartureData;
+            first.ArrivalData ??= other!.ArrivalData;
+
+            if (!string.IsNullOrEmpty(other!.IataCode))
+                first.IataCode = other.IataCode;
+            if (!string.IsNullOrEmpty(other.IcaoCode))
+                first.IcaoCode = other.IcaoCode;
+            if (!string.IsNullOrEmpty(other.Airline))
+                first.Airline = other.Airline;
+            if (other.Status != FlightStatus.Unknown)
+                first.Status = other.Status;
+        }
+
+        return first;
+    }
+
+    private static Flight CreateFlight(ParsedFlight p)
+    {
+        return new Flight
+        {
+            Date = p.FlightDate,
+            Number = p.FlightNumber,
+            IataCode = p.IataCode,
+            IcaoCode = p.IcaoCode,
+            Airline = p.Airline,
+            Status = p.Status,
             FlightSource = FlightSource.AviationStack,
         };
     }
 
-    private static void UpdateFlight(Flight flight, AviationStackFlight av)
+    private static void ApplyUpdate(Flight flight, ParsedFlight p)
     {
-        flight.Status = MapStatus(av.FlightStatus);
+        flight.Status = p.Status;
 
-        if (!string.IsNullOrEmpty(av.Flight.Iata))
-            flight.IataCode = av.Flight.Iata;
-        if (!string.IsNullOrEmpty(av.Flight.Icao))
-            flight.IcaoCode = av.Flight.Icao;
-        if (!string.IsNullOrEmpty(av.Airline.Name))
-            flight.Airline = av.Airline.Name;
+        if (!string.IsNullOrEmpty(p.IataCode))
+            flight.IataCode = p.IataCode;
+        if (!string.IsNullOrEmpty(p.IcaoCode))
+            flight.IcaoCode = p.IcaoCode;
+        if (!string.IsNullOrEmpty(p.Airline))
+            flight.Airline = p.Airline;
     }
 
-    private static void AddMovements(Flight flight, AviationStackFlight av, int airportId)
+    private static void AddMovement(Flight flight, ParsedFlight p, int airportId)
     {
-        if (av.Departure.Scheduled.HasValue)
-        {
-            flight.Movements.Add(BuildMovement(MovementType.Departure, av.Departure, airportId));
-        }
+        if (p.DepartureData?.Scheduled != null)
+            flight.Movements.Add(BuildMovement(MovementType.Departure, p.DepartureData, airportId));
 
-        if (av.Arrival.Scheduled.HasValue)
-        {
-            flight.Movements.Add(BuildMovement(MovementType.Arrival, av.Arrival, airportId));
-        }
+        if (p.ArrivalData?.Scheduled != null)
+            flight.Movements.Add(BuildMovement(MovementType.Arrival, p.ArrivalData, airportId));
     }
 
-    private static void UpdateMovements(Flight flight, AviationStackFlight av, int airportId)
+    private static void UpsertMovement(Flight flight, ParsedFlight p, int airportId)
     {
-        UpdateOrAddMovement(flight, MovementType.Departure, av.Departure, airportId);
-        UpdateOrAddMovement(flight, MovementType.Arrival, av.Arrival, airportId);
+        if (p.DepartureData?.Scheduled != null)
+            UpsertSingleMovement(flight, MovementType.Departure, p.DepartureData, airportId);
+
+        if (p.ArrivalData?.Scheduled != null)
+            UpsertSingleMovement(flight, MovementType.Arrival, p.ArrivalData, airportId);
     }
 
-    private static void UpdateOrAddMovement(Flight flight, MovementType type, AviationStackMovement av, int airportId)
+    private static void UpsertSingleMovement(Flight flight, MovementType type, AviationStackMovement data, int airportId)
     {
-        if (!av.Scheduled.HasValue)
-            return;
-
-        var movement = flight.Movements.FirstOrDefault(m => m.Type == type);
-        if (movement != null)
+        var existing = flight.Movements.FirstOrDefault(m => m.Type == type && m.AirportId == airportId);
+        if (existing != null)
         {
-            movement.ScheduledOn = av.Scheduled.Value;
-            movement.EstimatedOn = av.Estimated;
-            movement.ActualOn = av.Actual;
+            existing.ScheduledOn = data.Scheduled!.Value;
+            existing.EstimatedOn = data.Estimated;
+            existing.ActualOn = data.Actual;
         }
         else
         {
-            flight.Movements.Add(BuildMovement(type, av, airportId));
+            flight.Movements.Add(BuildMovement(type, data, airportId));
         }
     }
 
-    private static FlightMovement BuildMovement(MovementType type, AviationStackMovement av, int airportId)
+    private static FlightMovement BuildMovement(MovementType type, AviationStackMovement data, int airportId)
     {
         return new FlightMovement
         {
             Type = type,
             AirportId = airportId,
-            ScheduledOn = av.Scheduled!.Value,
-            EstimatedOn = av.Estimated,
-            ActualOn = av.Actual,
+            ScheduledOn = data.Scheduled!.Value,
+            EstimatedOn = data.Estimated,
+            ActualOn = data.Actual,
         };
     }
 

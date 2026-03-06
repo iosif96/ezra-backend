@@ -8,7 +8,19 @@ public class AviationStackResponse
     public AviationStackPagination Pagination { get; set; } = new();
 
     [JsonProperty("data")]
-    public List<AviationStackFlight> Data { get; set; } = new();
+    public List<AviationStackFlight>? Data { get; set; }
+
+    [JsonProperty("error")]
+    public AviationStackError? Error { get; set; }
+}
+
+public class AviationStackError
+{
+    [JsonProperty("code")]
+    public string? Code { get; set; }
+
+    [JsonProperty("message")]
+    public string? Message { get; set; }
 }
 
 public class AviationStackPagination
