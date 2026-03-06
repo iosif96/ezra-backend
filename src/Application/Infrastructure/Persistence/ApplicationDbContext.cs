@@ -32,6 +32,23 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
+    public DbSet<Airport> Airports => Set<Airport>();
+    public DbSet<Terminal> Terminals => Set<Terminal>();
+    public DbSet<Gate> Gates => Set<Gate>();
+    public DbSet<Flight> Flights => Set<Flight>();
+    public DbSet<FlightMovement> FlightMovements => Set<FlightMovement>();
+    public DbSet<BoardingPass> BoardingPasses => Set<BoardingPass>();
+    public DbSet<Identity> Identities => Set<Identity>();
+    public DbSet<Staff> Staff => Set<Staff>();
+    public DbSet<Touchpoint> Touchpoints => Set<Touchpoint>();
+    public DbSet<TouchpointScan> TouchpointScans => Set<TouchpointScan>();
+    public DbSet<Merchant> Merchants => Set<Merchant>();
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+    public DbSet<Message> Messages => Set<Message>();
+    public DbSet<Request> Requests => Set<Request>();
+    public DbSet<Event> Events => Set<Event>();
+    public DbSet<Feedback> Feedbacks => Set<Feedback>();
+
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         return await base.SaveChangesAsync(cancellationToken);
