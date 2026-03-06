@@ -18,11 +18,11 @@ public class WhatsAppChannel : IMessagingChannel
     private readonly ILogger<WhatsAppChannel> _logger;
 
     public WhatsAppChannel(
-        IHttpClientFactory httpClientFactory,
+        HttpClient httpClient,
         IConfiguration configuration,
         ILogger<WhatsAppChannel> logger)
     {
-        _httpClient = httpClientFactory.CreateClient("WhatsAppClient");
+        _httpClient = httpClient;
         _phoneNumberId = configuration["WhatsAppConfiguration:PhoneNumberId"]
             ?? throw new InvalidOperationException("WhatsApp PhoneNumberId not configured");
         _accessToken = configuration["WhatsAppConfiguration:AccessToken"]

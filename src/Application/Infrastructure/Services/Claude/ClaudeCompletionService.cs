@@ -24,11 +24,11 @@ public class ClaudeCompletionService : IChatCompletionService
     private readonly JsonSerializerSettings _jsonSettings;
 
     public ClaudeCompletionService(
-        IHttpClientFactory httpClientFactory,
+        HttpClient httpClient,
         IConfiguration configuration,
         ILogger<ClaudeCompletionService> logger)
     {
-        _httpClient = httpClientFactory.CreateClient("ClaudeClient");
+        _httpClient = httpClient;
         _apiKey = configuration["AnthropicConfiguration:ApiKey"]
             ?? throw new InvalidOperationException("Anthropic API key not configured");
         _logger = logger;
