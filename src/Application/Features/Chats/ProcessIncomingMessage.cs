@@ -69,11 +69,15 @@ internal sealed class ProcessIncomingMessageHandler(
 
         // Load conversation history and build LLM request
         var history = await LoadHistoryAsync(conversation.Id, cancellationToken);
-        var systemPrompt = await promptBuilder.BuildAsync(cancellationToken: cancellationToken);
+        var systemPrompt = promptBuilder.Build();
         var model = configuration["AnthropicConfiguration:Model"] ?? "claude-sonnet-4-5-20250514";
         var tools = chatTools.Select(t => t.ToDefinition()).ToList();
 
-        // Add current user message to history
+        // Add current user message to history with timestamp
+        userContent.Insert(0, new TextContent
+        {
+            Text = $"[{conversation.LastMessageOn:yyyy-MM-dd HH:mm} UTC]",
+        });
         history.Add(new ChatMessageDto
         {
             Role = ChatMessageRole.User,
@@ -240,7 +244,11 @@ internal sealed class ProcessIncomingMessageHandler(
             if (string.IsNullOrEmpty(msg.Content))
                 continue;
 
-            history.Add(ChatMessageDto.FromText(role, msg.Content));
+            var text = role == ChatMessageRole.User
+                ? $"[{msg.Created:yyyy-MM-dd HH:mm} UTC] {msg.Content}"
+                : msg.Content;
+
+            history.Add(ChatMessageDto.FromText(role, text));
         }
 
         return history;

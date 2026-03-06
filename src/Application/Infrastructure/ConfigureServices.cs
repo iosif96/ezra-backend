@@ -80,6 +80,9 @@ public static class ConfigureServices
         services.AddHttpClient<IMessagingChannel, WhatsAppChannel>();
         services.AddScoped<ChatPromptBuilder>();
         services.AddScoped<IChatTool, CreateRequestTool>();
+        services.AddScoped<IChatTool, BindIdentityTool>();
+        services.AddScoped<IChatTool, LookupAirportTool>();
+        services.AddScoped<IChatTool, LookupFlightTool>();
 
         return services;
     }

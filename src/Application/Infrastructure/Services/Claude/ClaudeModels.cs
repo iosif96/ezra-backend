@@ -12,7 +12,7 @@ internal class ClaudeRequest
     public int MaxTokens { get; set; }
 
     [JsonProperty("system", NullValueHandling = NullValueHandling.Ignore)]
-    public string? System { get; set; }
+    public JToken? System { get; set; }
 
     [JsonProperty("temperature", NullValueHandling = NullValueHandling.Ignore)]
     public double? Temperature { get; set; }
@@ -43,6 +43,9 @@ internal class ClaudeTool
 
     [JsonProperty("input_schema")]
     public JToken InputSchema { get; set; } = null!;
+
+    [JsonProperty("cache_control", NullValueHandling = NullValueHandling.Ignore)]
+    public JObject? CacheControl { get; set; }
 }
 
 internal class ClaudeResponse
@@ -85,6 +88,12 @@ internal class ClaudeUsage
 
     [JsonProperty("output_tokens")]
     public int OutputTokens { get; set; }
+
+    [JsonProperty("cache_creation_input_tokens")]
+    public int CacheCreationInputTokens { get; set; }
+
+    [JsonProperty("cache_read_input_tokens")]
+    public int CacheReadInputTokens { get; set; }
 }
 
 internal class ClaudeErrorResponse

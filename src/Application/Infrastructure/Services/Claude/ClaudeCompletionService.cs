@@ -70,13 +70,28 @@ public class ClaudeCompletionService : IChatCompletionService
 
     private static ClaudeRequest MapToClaudeRequest(ChatCompletionRequest request)
     {
+        var cacheBreakpoint = new JObject { ["type"] = "ephemeral" };
+
         var claudeRequest = new ClaudeRequest
         {
             Model = request.Model,
             MaxTokens = request.MaxTokens,
-            System = request.SystemPrompt,
             Temperature = request.Temperature,
         };
+
+        // System prompt as a cached block
+        if (!string.IsNullOrWhiteSpace(request.SystemPrompt))
+        {
+            claudeRequest.System = new JArray
+            {
+                new JObject
+                {
+                    ["type"] = "text",
+                    ["text"] = request.SystemPrompt,
+                    ["cache_control"] = cacheBreakpoint,
+                },
+            };
+        }
 
         foreach (var message in request.Messages)
         {
@@ -139,11 +154,12 @@ public class ClaudeCompletionService : IChatCompletionService
 
         if (request.Tools is { Count: > 0 })
         {
-            claudeRequest.Tools = request.Tools.Select(t => new ClaudeTool
+            claudeRequest.Tools = request.Tools.Select((t, i) => new ClaudeTool
             {
                 Name = t.Name,
                 Description = t.Description,
                 InputSchema = JToken.Parse(t.InputSchema.GetRawText()),
+                CacheControl = i == request.Tools.Count - 1 ? cacheBreakpoint : null,
             }).ToList();
         }
 
