@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Application.Infrastructure.Persistence;
@@ -17,7 +18,11 @@ public static class InitialiserExtensions
 
         // Initialize and seed
         await initialiser.InitialiseAsync();
-        await initialiser.SeedAsync();
+
+        if (app.Environment.IsDevelopment())
+        {
+            await initialiser.SeedAsync();
+        }
     }
 }
 
