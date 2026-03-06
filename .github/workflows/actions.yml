@@ -8,7 +8,7 @@ name: build and test
 on:
   push:
   pull_request:
-    branches: [main]
+    branches: [master]
     paths-ignore:
       - "README.md"
 
@@ -31,12 +31,12 @@ jobs:
     # Each job run contains these five steps
     steps:
       # 1) Check out the source code so that the workflow can access it.
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       # 2) Set up the .NET CLI environment for the workflow to use.
       #    The .NET version is specified by the environment variable.
       - name: Setup .NET
-        uses: actions/setup-dotnet@v1
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
