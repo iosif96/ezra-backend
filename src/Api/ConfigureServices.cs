@@ -53,6 +53,7 @@ public static class ConfigureServices
                 options.PayloadSerializerSettings.Converters.Add(new Newtonsoft.Json.Converters.StringEnumConverter());
             });
         services.AddScoped<ITouchpointScanNotifier, TouchpointScanNotifier>();
+        services.AddScoped<IOverviewNotifier, OverviewNotifier>();
 
         services.AddSingleton<ApiExceptionFilterAttribute>();
 

@@ -1,12 +1,15 @@
+using Application.Common.Interfaces;
 using Application.Domain.Entities;
 using Application.Domain.Enums;
 using Application.Infrastructure.Persistence;
+
+using Microsoft.EntityFrameworkCore;
 
 using Newtonsoft.Json.Linq;
 
 namespace Application.Features.Conversations.Tools;
 
-public class CreateRequestTool(ApplicationDbContext context) : IChatTool
+public class CreateRequestTool(ApplicationDbContext context, IOverviewNotifier overviewNotifier) : IChatTool
 {
     public string Name => "create_request";
 
@@ -57,6 +60,14 @@ public class CreateRequestTool(ApplicationDbContext context) : IChatTool
 
         context.Requests.Add(entity);
         await context.SaveChangesAsync(cancellationToken);
+
+        var channelType = await context.Conversations
+            .Where(c => c.Id == toolContext.ConversationId)
+            .Select(c => c.ChannelType)
+            .FirstAsync(cancellationToken);
+
+        await overviewNotifier.NotifyRequestCreated(new RequestCreatedNotification(
+            entity.Id, entity.Type, entity.Content, entity.Status, channelType, entity.Created), cancellationToken);
 
         return $"Request #{entity.Id} created successfully. Type: {requestType}, Status: Requested.";
     }

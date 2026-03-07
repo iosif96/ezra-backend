@@ -1,8 +1,11 @@
+using Application.Common.Interfaces;
 using Application.Common.Security;
 using Application.Domain.Enums;
 using Application.Infrastructure.Persistence;
 
 using FluentValidation;
+
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Requests.CreateRequest;
 
@@ -17,7 +20,7 @@ public class CreateRequestCommandValidator : AbstractValidator<CreateRequestComm
     }
 }
 
-internal sealed class CreateRequestCommandHandler(ApplicationDbContext context) : IRequestHandler<CreateRequestCommand, int>
+internal sealed class CreateRequestCommandHandler(ApplicationDbContext context, IOverviewNotifier overviewNotifier) : IRequestHandler<CreateRequestCommand, int>
 {
     public async Task<int> Handle(CreateRequestCommand request, CancellationToken cancellationToken)
     {
@@ -31,6 +34,14 @@ internal sealed class CreateRequestCommandHandler(ApplicationDbContext context) 
 
         context.Requests.Add(entity);
         await context.SaveChangesAsync(cancellationToken);
+
+        var channelType = await context.Conversations
+            .Where(c => c.Id == request.ConversationId)
+            .Select(c => c.ChannelType)
+            .FirstAsync(cancellationToken);
+
+        await overviewNotifier.NotifyRequestCreated(new RequestCreatedNotification(
+            entity.Id, entity.Type, entity.Content, entity.Status, channelType, entity.Created), cancellationToken);
 
         return entity.Id;
     }

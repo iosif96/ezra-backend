@@ -70,6 +70,7 @@ public static class ConfigurePipeline
         app.UseAuthorization();
 
         app.MapHub<TouchpointScanHub>("/hubs/touchpoint-scans");
+        app.MapHub<OverviewHub>("/hubs/overview");
 
         app.MapControllers();
 

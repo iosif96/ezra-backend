@@ -26,6 +26,7 @@ internal sealed class ProcessIncomingMessageHandler(
     IMessagingChannel messagingChannel,
     IEnumerable<IChatTool> tools,
     PromptBuilder promptBuilder,
+    IOverviewNotifier overviewNotifier,
     IConfiguration configuration,
     ILogger<ProcessIncomingMessageHandler> logger) : IRequestHandler<ProcessIncomingMessageCommand>
 {
@@ -57,6 +58,8 @@ internal sealed class ProcessIncomingMessageHandler(
 
         SaveAssistantMessage(conversation, responseText, inputTokens, outputTokens);
         await context.SaveChangesAsync(cancellationToken);
+
+        await BroadcastConversationUpdate(cancellationToken);
 
         if (!isWeb)
         {
@@ -262,6 +265,20 @@ internal sealed class ProcessIncomingMessageHandler(
         await context.SaveChangesAsync(cancellationToken);
 
         return conversation;
+    }
+
+    private async Task BroadcastConversationUpdate(CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var oneHourAgo = now.AddHours(-1);
+        var todayStart = now.Date;
+
+        var update = new ConversationUpdate(
+            await context.Messages.CountAsync(m => m.Created >= oneHourAgo, cancellationToken),
+            await context.Conversations.CountAsync(c => c.LastMessageOn >= oneHourAgo, cancellationToken),
+            await context.Conversations.CountAsync(c => c.LastMessageOn >= todayStart, cancellationToken));
+
+        await overviewNotifier.NotifyConversationUpdate(update, cancellationToken);
     }
 
     private async Task<List<ChatMessageDto>> LoadHistoryAsync(int conversationId, CancellationToken cancellationToken)
