@@ -29,7 +29,7 @@ public record RequestBriefResponse(
     DateTime? LastModified);
 
 [Authorize]
-public record GetRequestsWithPaginationQuery(int? ConversationId = null, RequestStatus? Status = null, RequestType? Type = null, int PageNumber = 1, int PageSize = 10) : IRequest<PaginatedList<RequestBriefResponse>>;
+public record GetRequestsWithPaginationQuery(int? ConversationId = null, RequestStatus? Status = null, RequestType? Type = null, int? StaffId = null, int PageNumber = 1, int PageSize = 10) : IRequest<PaginatedList<RequestBriefResponse>>;
 
 internal sealed class GetRequestsWithPaginationQueryHandler(ApplicationDbContext context) : IRequestHandler<GetRequestsWithPaginationQuery, PaginatedList<RequestBriefResponse>>
 {
@@ -39,6 +39,7 @@ internal sealed class GetRequestsWithPaginationQueryHandler(ApplicationDbContext
             .Where(x => request.ConversationId == null || x.ConversationId == request.ConversationId)
             .Where(x => request.Status == null || x.Status == request.Status)
             .Where(x => request.Type == null || x.Type == request.Type)
+            .Where(x => request.StaffId == null || x.StaffId == request.StaffId)
             .OrderByDescending(x => x.Created)
             .Select(x => new RequestBriefResponse(
                 x.Id,

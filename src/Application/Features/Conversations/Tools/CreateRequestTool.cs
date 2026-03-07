@@ -12,6 +12,7 @@ namespace Application.Features.Conversations.Tools;
 public class CreateRequestTool(ApplicationDbContext context, IOverviewNotifier overviewNotifier) : IChatTool
 {
     public string Name => "create_request";
+    public string UserLabel => "Request submitted";
 
     public string Description =>
         "Creates a service request on behalf of the passenger. " +

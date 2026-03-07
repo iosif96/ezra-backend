@@ -33,6 +33,7 @@ public class PromptBuilder
         - For emergencies, always create a request immediately — do not ask for confirmation.
         - For special assistance, confirm the type of help needed before creating a request.
         - If a passenger seems stressed or frustrated, acknowledge their feelings before problem-solving.
+        - Do not spam the user with "What else can I help you with?" sentences
         """;
 
     public string Build() => BasePrompt;

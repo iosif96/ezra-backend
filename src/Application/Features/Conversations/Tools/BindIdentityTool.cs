@@ -10,6 +10,7 @@ namespace Application.Features.Conversations.Tools;
 public class BindIdentityTool(ApplicationDbContext context) : IChatTool
 {
     public string Name => "bind_identity";
+    public string UserLabel => "Boarding pass verified";
 
     public string Description =>
         "Looks up a boarding pass by its code and binds the passenger's identity to this conversation. " +

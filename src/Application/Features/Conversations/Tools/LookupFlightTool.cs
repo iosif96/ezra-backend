@@ -10,6 +10,7 @@ namespace Application.Features.Conversations.Tools;
 public class LookupFlightTool(ApplicationDbContext context) : IChatTool
 {
     public string Name => "lookup_flight";
+    public string UserLabel => "Looking up flight";
 
     public string Description =>
         "Searches for a flight by flight number (e.g. 'W6 3121', 'BA 283'). " +

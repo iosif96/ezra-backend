@@ -12,6 +12,8 @@ public interface IChatTool
 
     bool IsAvailable(ToolContext context) => true;
 
+    string UserLabel { get; }
+
     Task<string> ExecuteAsync(JObject input, ToolContext context, CancellationToken cancellationToken = default);
 
     ChatToolDefinition ToDefinition() => new()

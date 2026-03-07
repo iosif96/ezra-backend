@@ -10,6 +10,7 @@ namespace Application.Features.Conversations.Tools;
 public class LookupAirportTool(ApplicationDbContext context) : IChatTool
 {
     public string Name => "lookup_airport";
+    public string UserLabel => "Looking up airport";
 
     public string Description =>
         "Searches for an airport by IATA code (e.g. 'OTP', 'LHR'), city name (e.g. 'Oradea', 'London'), " +

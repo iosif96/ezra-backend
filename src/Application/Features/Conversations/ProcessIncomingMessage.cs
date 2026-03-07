@@ -151,19 +151,58 @@ internal sealed class ProcessIncomingMessageHandler(
         {
             round++;
 
+            var toolCalls = result.GetToolCalls();
+
+            // Save the assistant's tool call decision to DB
+            var toolCallSummary = string.Join("\n", toolCalls.Select(t => $"[Tool: {t.Name}] {t.Input}"));
+            context.Messages.Add(new Message
+            {
+                ConversationId = conversation.Id,
+                Type = MessageType.Assistant,
+                MediaType = Domain.Enums.MediaType.Text,
+                Content = toolCallSummary,
+            });
+
             history.Add(new ChatMessageDto
             {
                 Role = ChatMessageRole.Assistant,
                 Content = result.Content,
             });
 
-            var toolResults = await ExecuteToolCallsAsync(result.GetToolCalls(), availableTools, toolContext, cancellationToken);
+            var toolResults = await ExecuteToolCallsAsync(toolCalls, availableTools, toolContext, cancellationToken);
+
+            // Send tool labels to the user
+            foreach (var toolCall in toolCalls)
+            {
+                var tool = availableTools.FirstOrDefault(t => t.Name == toolCall.Name);
+                if (tool is not null)
+                {
+                    var isError = toolResults.OfType<ToolResultContent>()
+                        .FirstOrDefault(r => r.ToolUseId == toolCall.Id)?.IsError ?? false;
+                    var label = isError ? $"> {tool.UserLabel} failed" : $"> {tool.UserLabel}";
+                    await messagingChannel.SendTextMessageAsync(conversation.ChannelId, label, cancellationToken);
+                }
+            }
+
+            // Save tool results as a system message to DB
+            var resultParts = toolCalls.Zip(
+                toolResults.OfType<ToolResultContent>(),
+                (call, res) => $"[Tool result: {call.Name}] {res.Content}");
+            context.Messages.Add(new Message
+            {
+                ConversationId = conversation.Id,
+                Type = MessageType.System,
+                MediaType = Domain.Enums.MediaType.Text,
+                Content = string.Join("\n", resultParts),
+            });
 
             history.Add(new ChatMessageDto
             {
                 Role = ChatMessageRole.User,
                 Content = toolResults,
             });
+
+            await context.SaveChangesAsync(cancellationToken);
 
             result = await completionService.CompleteAsync(request, cancellationToken);
             totalInputTokens += result.InputTokens;
