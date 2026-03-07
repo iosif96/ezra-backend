@@ -13,5 +13,5 @@ public class Event : AuditableEntity
     public DateTime? ScheduledOn { get; set; }
     public string Content { get; set; } = string.Empty;
 
-    public ICollection<Message> Notifications { get; set; } = new List<Message>();
+    public ICollection<Message> Messages { get; set; } = new List<Message>();
 }

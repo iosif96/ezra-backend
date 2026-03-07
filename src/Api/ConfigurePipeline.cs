@@ -1,5 +1,7 @@
 ﻿using Application.Infrastructure.Persistence;
 
+using Hangfire;
+
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
@@ -58,6 +60,8 @@ public static class ConfigurePipeline
         {
             app.UseExceptionHandler("/error");
         }
+
+        app.UseHangfireDashboard();
 
         app.UseAuthentication();
 

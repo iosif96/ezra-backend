@@ -9,6 +9,7 @@ using Application.Infrastructure.Persistence;
 using Application.Infrastructure.Persistence.Interceptors;
 using Application.Features.Conversations.Prompts;
 using Application.Features.Conversations.Tools;
+using Application.Features.Events;
 using Application.Infrastructure.Services;
 using Application.Infrastructure.Services.AviationStack;
 using Application.Infrastructure.Services.BlobStorage;
@@ -16,6 +17,7 @@ using Application.Infrastructure.Services.Claude;
 using Application.Infrastructure.Services.WhatsApp;
 
 using Ardalis.GuardClauses;
+
 
 using FluentValidation;
 
@@ -74,6 +76,8 @@ public static class ConfigureServices
 
         services.AddSingleton<IDateTime, DateTimeService>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+
+        services.AddScoped<EventJobRunner>();
 
         // Chat / LLM
         services.AddHttpClient<IChatCompletionService, ClaudeCompletionService>();

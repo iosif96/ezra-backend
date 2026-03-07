@@ -1,8 +1,11 @@
 using Application.Common.Security;
 using Application.Domain.Enums;
+using Application.Features.Events.ProcessEvent;
 using Application.Infrastructure.Persistence;
 
 using FluentValidation;
+
+using Hangfire;
 
 namespace Application.Features.Events.CreateEvent;
 
@@ -17,7 +20,10 @@ public class CreateEventCommandValidator : AbstractValidator<CreateEventCommand>
     }
 }
 
-internal sealed class CreateEventCommandHandler(ApplicationDbContext context) : IRequestHandler<CreateEventCommand, int>
+internal sealed class CreateEventCommandHandler(
+    ApplicationDbContext context,
+    IBackgroundJobClient jobClient,
+    IMediator mediator) : IRequestHandler<CreateEventCommand, int>
 {
     public async Task<int> Handle(CreateEventCommand request, CancellationToken cancellationToken)
     {
@@ -31,6 +37,18 @@ internal sealed class CreateEventCommandHandler(ApplicationDbContext context) : 
 
         context.Events.Add(entity);
         await context.SaveChangesAsync(cancellationToken);
+
+        if (request.ScheduledOn is not null && request.ScheduledOn > DateTime.UtcNow)
+        {
+            // Schedule for later
+            var delay = request.ScheduledOn.Value - DateTime.UtcNow;
+            jobClient.Schedule<EventJobRunner>(r => r.ProcessAsync(entity.Id), delay);
+        }
+        else
+        {
+            // Process immediately
+            await mediator.Send(new ProcessEventCommand(entity.Id), cancellationToken);
+        }
 
         return entity.Id;
     }

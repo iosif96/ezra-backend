@@ -12,6 +12,9 @@ public class Message : AuditableEntity
     public MediaType MediaType { get; set; }
     public string? MediaUrl { get; set; }
     public string? Content { get; set; }
+    public int? EventId { get; set; }
+    public Event? Event { get; set; }
+
     public string? Model { get; set; }
     public int? InputTokens { get; set; }
     public int? OutputTokens { get; set; }

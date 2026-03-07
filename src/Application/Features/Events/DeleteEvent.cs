@@ -1,6 +1,8 @@
 using Application.Common.Security;
 using Application.Infrastructure.Persistence;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Application.Features.Events.DeleteEvent;
 
 [Authorize]
@@ -11,7 +13,14 @@ internal sealed class DeleteEventCommandHandler(ApplicationDbContext context) : 
     public async Task Handle(DeleteEventCommand request, CancellationToken cancellationToken)
     {
         var entity = await context.Events
-            .FindAsync(new object[] { request.Id }, cancellationToken) ?? throw new NotFoundException(nameof(Application.Domain.Entities.Event), request.Id);
+            .Include(e => e.Messages)
+            .FirstOrDefaultAsync(e => e.Id == request.Id, cancellationToken)
+            ?? throw new NotFoundException(nameof(Application.Domain.Entities.Event), request.Id);
+
+        if (entity.Messages.Count > 0)
+        {
+            throw new InvalidOperationException("Cannot delete an event that has already been processed.");
+        }
 
         context.Events.Remove(entity);
         await context.SaveChangesAsync(cancellationToken);

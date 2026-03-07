@@ -7,6 +7,9 @@ using Application;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 
+using Hangfire;
+using Hangfire.SqlServer;
+
 namespace Api;
 
 public static class ConfigureServices
@@ -36,6 +39,14 @@ public static class ConfigureServices
         services.AddCorsCustom();
         services.AddJWTCustom(configuration);
         services.AddHttpContextAccessor();
+
+        var connectionString = configuration.GetConnectionString("DefaultConnection");
+        services.AddHangfire(config => config
+            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+            .UseSimpleAssemblyNameTypeSerializer()
+            .UseRecommendedSerializerSettings()
+            .UseSqlServerStorage(connectionString));
+        services.AddHangfireServer();
 
         services.AddSingleton<ApiExceptionFilterAttribute>();
 

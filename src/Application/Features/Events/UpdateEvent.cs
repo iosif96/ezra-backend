@@ -1,8 +1,9 @@
 using Application.Common.Security;
-using Application.Domain.Enums;
 using Application.Infrastructure.Persistence;
 
 using FluentValidation;
+
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Events.UpdateEvent;
 
@@ -22,7 +23,14 @@ internal sealed class UpdateEventCommandHandler(ApplicationDbContext context) : 
     public async Task Handle(UpdateEventCommand request, CancellationToken cancellationToken)
     {
         var entity = await context.Events
-            .FindAsync(new object[] { request.Id }, cancellationToken) ?? throw new NotFoundException(nameof(Application.Domain.Entities.Event), request.Id);
+            .Include(e => e.Messages)
+            .FirstOrDefaultAsync(e => e.Id == request.Id, cancellationToken)
+            ?? throw new NotFoundException(nameof(Application.Domain.Entities.Event), request.Id);
+
+        if (entity.Messages.Count > 0)
+        {
+            throw new InvalidOperationException("Cannot update an event that has already been processed.");
+        }
 
         entity.ScheduledOn = request.ScheduledOn;
         entity.Content = request.Content;

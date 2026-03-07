@@ -25,6 +25,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Hangfire.Core" />
     <PackageReference Include="Newtonsoft.Json" />
     <PackageReference Include="Portable.BouncyCastle" />
     <PackageReference Include="MailKit" />
