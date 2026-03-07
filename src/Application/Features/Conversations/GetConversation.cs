@@ -1,4 +1,3 @@
-using Application.Common.Security;
 using Application.Domain.Entities;
 using Application.Domain.Enums;
 using Application.Infrastructure.Persistence;
@@ -15,7 +14,6 @@ public record IdentityWithFlightsDto(int Id, string? PassengerName, IReadOnlyLis
 
 public record ConversationResponse(int Id, ChannelType ChannelType, string ChannelId, IdentityWithFlightsDto? Identity, DateTime LastMessageOn, DateTime Created);
 
-[Authorize]
 public record GetConversationQuery(int Id) : IRequest<ConversationResponse>;
 
 internal sealed class GetConversationQueryHandler(ApplicationDbContext context) : IRequestHandler<GetConversationQuery, ConversationResponse>
