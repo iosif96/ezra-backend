@@ -5,7 +5,9 @@ using Application.Infrastructure.Persistence;
 
 namespace Application.Features.BoardingPasses.GetBoardingPassesWithPagination;
 
-public record BoardingPassBriefResponse(int Id, int FlightId, string Code, string? Seat, int IdentityId);
+public record BoardingPassIdentityDto(int Id, string? PassengerName);
+
+public record BoardingPassBriefResponse(int Id, int FlightId, string Code, string? Seat, BoardingPassIdentityDto Identity);
 
 [Authorize]
 public record GetBoardingPassesWithPaginationQuery(int? FlightId = null, int? IdentityId = null, int PageNumber = 1, int PageSize = 10) : IRequest<PaginatedList<BoardingPassBriefResponse>>;
@@ -18,7 +20,7 @@ internal sealed class GetBoardingPassesWithPaginationQueryHandler(ApplicationDbC
             .Where(x => request.FlightId == null || x.FlightId == request.FlightId)
             .Where(x => request.IdentityId == null || x.IdentityId == request.IdentityId)
             .OrderBy(x => x.Id)
-            .Select(x => new BoardingPassBriefResponse(x.Id, x.FlightId, x.Code, x.Seat, x.IdentityId))
+            .Select(x => new BoardingPassBriefResponse(x.Id, x.FlightId, x.Code, x.Seat, new BoardingPassIdentityDto(x.IdentityId, x.Identity.PassengerName)))
             .PaginatedListAsync(request.PageNumber, request.PageSize);
     }
 }
