@@ -1,6 +1,5 @@
 using Application.Common.Mappings;
 using Application.Common.Models;
-using Application.Common.Security;
 using Application.Domain.Enums;
 using Application.Infrastructure.Persistence;
 
@@ -8,7 +7,6 @@ namespace Application.Features.Messages.GetMessagesWithPagination;
 
 public record MessageBriefResponse(int Id, int ConversationId, MessageType Type, MediaType MediaType, string? Content);
 
-[Authorize]
 public record GetMessagesWithPaginationQuery(int? ConversationId = null, MessageType? Type = null, int PageNumber = 1, int PageSize = 20) : IRequest<PaginatedList<MessageBriefResponse>>;
 
 internal sealed class GetMessagesWithPaginationQueryHandler(ApplicationDbContext context) : IRequestHandler<GetMessagesWithPaginationQuery, PaginatedList<MessageBriefResponse>>

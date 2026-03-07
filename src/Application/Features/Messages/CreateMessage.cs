@@ -1,13 +1,14 @@
-using Application.Common.Security;
 using Application.Domain.Entities;
 using Application.Domain.Enums;
+using Application.Features.Conversations.ProcessIncomingMessage;
 using Application.Infrastructure.Persistence;
 
 using FluentValidation;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Application.Features.Messages.CreateMessage;
 
-[Authorize]
 public record CreateMessageCommand(
     int ConversationId,
     MessageType Type,
@@ -28,7 +29,7 @@ public class CreateMessageCommandValidator : AbstractValidator<CreateMessageComm
     }
 }
 
-internal sealed class CreateMessageCommandHandler(ApplicationDbContext context) : IRequestHandler<CreateMessageCommand, int>
+internal sealed class CreateMessageCommandHandler(ApplicationDbContext context, ISender sender) : IRequestHandler<CreateMessageCommand, int>
 {
     public async Task<int> Handle(CreateMessageCommand request, CancellationToken cancellationToken)
     {
@@ -47,6 +48,20 @@ internal sealed class CreateMessageCommandHandler(ApplicationDbContext context) 
 
         context.Messages.Add(entity);
         await context.SaveChangesAsync(cancellationToken);
+
+        if (request.Type == MessageType.User)
+        {
+            var conversation = await context.Conversations
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Id == request.ConversationId, cancellationToken)
+                ?? throw new NotFoundException(nameof(Conversation), request.ConversationId);
+
+            await sender.Send(new ProcessIncomingMessageCommand(
+                conversation.ChannelType,
+                conversation.ChannelId,
+                request.Content,
+                null, null, null), cancellationToken);
+        }
 
         return entity.Id;
     }

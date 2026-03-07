@@ -1,14 +1,23 @@
-using Application.Common.Security;
 using Application.Domain.Entities;
 using Application.Domain.Enums;
 using Application.Infrastructure.Persistence;
 
 using FluentValidation;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Application.Features.TouchpointScans.CreateTouchpointScan;
 
-[Authorize]
-public record CreateTouchpointScanCommand(int TouchpointId, ChannelType ChannelType) : IRequest<int>;
+public record CreateTouchpointScanResponse(
+    int ScanId,
+    TouchpointInfo Touchpoint);
+
+public record TouchpointInfo(
+    int Id,
+    string Label,
+    string AirportCode);
+
+public record CreateTouchpointScanCommand(int TouchpointId, ChannelType ChannelType) : IRequest<CreateTouchpointScanResponse>;
 
 public class CreateTouchpointScanCommandValidator : AbstractValidator<CreateTouchpointScanCommand>
 {
@@ -18,10 +27,15 @@ public class CreateTouchpointScanCommandValidator : AbstractValidator<CreateTouc
     }
 }
 
-internal sealed class CreateTouchpointScanCommandHandler(ApplicationDbContext context) : IRequestHandler<CreateTouchpointScanCommand, int>
+internal sealed class CreateTouchpointScanCommandHandler(ApplicationDbContext context) : IRequestHandler<CreateTouchpointScanCommand, CreateTouchpointScanResponse>
 {
-    public async Task<int> Handle(CreateTouchpointScanCommand request, CancellationToken cancellationToken)
+    public async Task<CreateTouchpointScanResponse> Handle(CreateTouchpointScanCommand request, CancellationToken cancellationToken)
     {
+        var touchpoint = await context.Touchpoints
+            .Include(t => t.Airport)
+            .FirstOrDefaultAsync(t => t.Id == request.TouchpointId, cancellationToken)
+            ?? throw new NotFoundException(nameof(Touchpoint), request.TouchpointId);
+
         var entity = new TouchpointScan
         {
             TouchpointId = request.TouchpointId,
@@ -31,6 +45,11 @@ internal sealed class CreateTouchpointScanCommandHandler(ApplicationDbContext co
         context.TouchpointScans.Add(entity);
         await context.SaveChangesAsync(cancellationToken);
 
-        return entity.Id;
+        return new CreateTouchpointScanResponse(
+            entity.Id,
+            new TouchpointInfo(
+                touchpoint.Id,
+                touchpoint.Label,
+                touchpoint.Airport.IataCode));
     }
 }

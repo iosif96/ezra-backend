@@ -12,13 +12,11 @@ namespace Application.Features.Flights.SyncFlights;
 
 public record SyncFlightsResponse(int Created, int Updated, int Skipped);
 
-[Authorize]
 public record SyncFlightsCommand(int AirportId) : IRequest<SyncFlightsResponse>;
 
 internal sealed class SyncFlightsCommandHandler(
     ApplicationDbContext context,
     IAviationStackService aviationStack,
-    IDateTime dateTime,
     ILogger<SyncFlightsCommandHandler> logger) : IRequestHandler<SyncFlightsCommand, SyncFlightsResponse>
 {
     public async Task<SyncFlightsResponse> Handle(SyncFlightsCommand request, CancellationToken cancellationToken)
@@ -28,19 +26,13 @@ internal sealed class SyncFlightsCommandHandler(
             .FirstOrDefaultAsync(a => a.Id == request.AirportId, cancellationToken)
             ?? throw new NotFoundException(nameof(Airport), request.AirportId);
 
-        // Fetch today + tomorrow, departures + arrivals from AviationStack
-        var today = DateOnly.FromDateTime(dateTime.Now);
-        var tomorrow = today.AddDays(1);
-
+        // Fetch departures + arrivals from AviationStack (free tier returns current flights, no date filter)
         var fetched = new List<(AviationStackFlight Flight, MovementType Direction)>();
 
-        foreach (var date in new[] { today, tomorrow })
+        foreach (var direction in new[] { MovementType.Departure, MovementType.Arrival })
         {
-            foreach (var direction in new[] { MovementType.Departure, MovementType.Arrival })
-            {
-                var flights = await aviationStack.GetFlightsAsync(airport.IataCode, date, direction, cancellationToken);
-                fetched.AddRange(flights.Select(f => (f, direction)));
-            }
+            var flights = await aviationStack.GetFlightsAsync(airport.IataCode, direction, cancellationToken);
+            fetched.AddRange(flights.Select(f => (f, direction)));
         }
 
         // A flight can appear in both dep and arr queries — deduplicate and merge movements

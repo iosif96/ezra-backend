@@ -14,7 +14,7 @@ namespace Api.Endpoints;
 public class TouchpointScansController : ApiControllerBase
 {
     [HttpPost]
-    public async Task<ActionResult<int>> Create(CreateTouchpointScan.CreateTouchpointScanCommand command)
+    public async Task<ActionResult<CreateTouchpointScan.CreateTouchpointScanResponse>> Create(CreateTouchpointScan.CreateTouchpointScanCommand command)
     {
         return await Mediator.Send(command);
     }

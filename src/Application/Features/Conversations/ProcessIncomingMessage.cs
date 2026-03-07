@@ -33,27 +33,35 @@ internal sealed class ProcessIncomingMessageHandler(
 
     public async Task Handle(ProcessIncomingMessageCommand command, CancellationToken cancellationToken)
     {
+        var isWeb = command.ChannelType == ChannelType.Web;
         var conversation = await GetOrCreateConversationAsync(command, cancellationToken);
-
-        var userContent = await BuildUserContentAsync(command, cancellationToken);
-        if (userContent.Count == 0)
-        {
-            return;
-        }
-
         var history = await LoadHistoryAsync(conversation.Id, cancellationToken);
 
-        SaveUserMessage(conversation, command);
-        await context.SaveChangesAsync(cancellationToken);
+        if (!isWeb)
+        {
+            var userContent = await BuildUserContentAsync(command, cancellationToken);
+            if (userContent.Count == 0)
+            {
+                return;
+            }
+
+            SaveUserMessage(conversation, command);
+            await context.SaveChangesAsync(cancellationToken);
+
+            AppendUserContent(history, conversation, userContent);
+        }
 
         // Call the LLM with conversation history and tools, running the tool loop if needed
         var (responseText, inputTokens, outputTokens) =
-            await GetAssistantResponseAsync(conversation, history, userContent, cancellationToken);
+            await GetAssistantResponseAsync(conversation, history, cancellationToken);
 
         SaveAssistantMessage(conversation, responseText, inputTokens, outputTokens);
         await context.SaveChangesAsync(cancellationToken);
 
-        await SendReplyAsync(command.ChannelId, responseText, cancellationToken);
+        if (!isWeb)
+        {
+            await SendReplyAsync(command.ChannelId, responseText, cancellationToken);
+        }
     }
 
     private async Task<List<ContentBlock>> BuildUserContentAsync(
@@ -93,16 +101,9 @@ internal sealed class ProcessIncomingMessageHandler(
         });
     }
 
-    private async Task<(string Text, int InputTokens, int OutputTokens)> GetAssistantResponseAsync(
-        Conversation conversation, List<ChatMessageDto> history, List<ContentBlock> userContent,
-        CancellationToken cancellationToken)
+    private static void AppendUserContent(
+        List<ChatMessageDto> history, Conversation conversation, List<ContentBlock> userContent)
     {
-        var model = configuration["AnthropicConfiguration:Model"] ?? "claude-sonnet-4-5-20250514";
-        var toolContext = new ToolContext { ConversationId = conversation.Id, IdentityId = conversation.IdentityId };
-        var availableTools = tools.Where(t => t.IsAvailable(toolContext)).ToList();
-        var toolDefinitions = availableTools.Select(t => t.ToDefinition()).ToList();
-
-        // Prepend timestamp to user message so the LLM knows when it was sent
         var timestampedContent = new List<ContentBlock>
         {
             new TextContent { Text = $"[{conversation.LastMessageOn:yyyy-MM-dd HH:mm} UTC]" },
@@ -114,6 +115,16 @@ internal sealed class ProcessIncomingMessageHandler(
             Role = ChatMessageRole.User,
             Content = timestampedContent,
         });
+    }
+
+    private async Task<(string Text, int InputTokens, int OutputTokens)> GetAssistantResponseAsync(
+        Conversation conversation, List<ChatMessageDto> history,
+        CancellationToken cancellationToken)
+    {
+        var model = configuration["AnthropicConfiguration:Model"] ?? "claude-sonnet-4-5-20250514";
+        var toolContext = new ToolContext { ConversationId = conversation.Id, IdentityId = conversation.IdentityId };
+        var availableTools = tools.Where(t => t.IsAvailable(toolContext)).ToList();
+        var toolDefinitions = availableTools.Select(t => t.ToDefinition()).ToList();
 
         var request = new ChatCompletionRequest
         {

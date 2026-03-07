@@ -1,4 +1,3 @@
-using Application.Common.Security;
 using Application.Domain.Entities;
 using Application.Domain.Enums;
 using Application.Infrastructure.Persistence;
@@ -7,7 +6,6 @@ using FluentValidation;
 
 namespace Application.Features.Conversations.CreateConversation;
 
-[Authorize]
 public record CreateConversationCommand(ChannelType ChannelType, string ChannelId, int? IdentityId) : IRequest<int>;
 
 public class CreateConversationCommandValidator : AbstractValidator<CreateConversationCommand>

@@ -28,7 +28,6 @@ public class AviationStackService : IAviationStackService
 
     public async Task<List<AviationStackFlight>> GetFlightsAsync(
         string airportIata,
-        DateOnly date,
         MovementType direction,
         CancellationToken cancellationToken = default)
     {
@@ -38,12 +37,12 @@ public class AviationStackService : IAviationStackService
         const int limit = 100;
 
         _logger.LogInformation(
-            "AviationStack sync started: {Direction} {Airport} on {Date}",
-            direction, airportIata, date);
+            "AviationStack sync started: {Direction} {Airport}",
+            direction, airportIata);
 
         while (true)
         {
-            var response = await FetchPageAsync(directionParam, airportIata, date, limit, offset, cancellationToken);
+            var response = await FetchPageAsync(directionParam, airportIata, limit, offset, cancellationToken);
 
             if (response.Data == null || response.Data.Count == 0)
                 break;
@@ -57,8 +56,8 @@ public class AviationStackService : IAviationStackService
         }
 
         _logger.LogInformation(
-            "AviationStack sync finished: {Count} {Direction} flights for {Airport} on {Date}",
-            allFlights.Count, direction, airportIata, date);
+            "AviationStack sync finished: {Count} {Direction} flights for {Airport}",
+            allFlights.Count, direction, airportIata);
 
         return allFlights;
     }
@@ -66,15 +65,14 @@ public class AviationStackService : IAviationStackService
     private async Task<AviationStackResponse> FetchPageAsync(
         string directionParam,
         string airportIata,
-        DateOnly date,
         int limit,
         int offset,
         CancellationToken cancellationToken)
     {
+        // Free tier does not support flight_date — omit it
         var url = $"{_config.BaseUrl}/flights" +
             $"?access_key={_config.ApiKey}" +
             $"&{directionParam}={airportIata}" +
-            $"&flight_date={date:yyyy-MM-dd}" +
             $"&limit={limit}" +
             $"&offset={offset}";
 
@@ -83,8 +81,8 @@ public class AviationStackService : IAviationStackService
         if (!httpResponse.IsSuccessStatusCode)
         {
             _logger.LogError(
-                "AviationStack HTTP {StatusCode} for {Direction}={Airport} date={Date}",
-                (int)httpResponse.StatusCode, directionParam, airportIata, date);
+                "AviationStack HTTP {StatusCode} for {Direction}={Airport}",
+                (int)httpResponse.StatusCode, directionParam, airportIata);
 
             throw new HttpRequestException(
                 $"AviationStack returned HTTP {(int)httpResponse.StatusCode}");
