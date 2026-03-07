@@ -1,3 +1,4 @@
+using Application.Common.Interfaces;
 using Application.Domain.Entities;
 using Application.Domain.Enums;
 using Application.Infrastructure.Persistence;
@@ -27,7 +28,7 @@ public class CreateTouchpointScanCommandValidator : AbstractValidator<CreateTouc
     }
 }
 
-internal sealed class CreateTouchpointScanCommandHandler(ApplicationDbContext context) : IRequestHandler<CreateTouchpointScanCommand, CreateTouchpointScanResponse>
+internal sealed class CreateTouchpointScanCommandHandler(ApplicationDbContext context, ITouchpointScanNotifier notifier) : IRequestHandler<CreateTouchpointScanCommand, CreateTouchpointScanResponse>
 {
     public async Task<CreateTouchpointScanResponse> Handle(CreateTouchpointScanCommand request, CancellationToken cancellationToken)
     {
@@ -44,6 +45,15 @@ internal sealed class CreateTouchpointScanCommandHandler(ApplicationDbContext co
 
         context.TouchpointScans.Add(entity);
         await context.SaveChangesAsync(cancellationToken);
+
+        await notifier.NotifyScanCreated(new TouchpointScanNotification(
+            entity.Id,
+            touchpoint.Id,
+            touchpoint.Label,
+            entity.ChannelType,
+            touchpoint.Latitude,
+            touchpoint.Longitude,
+            entity.Created), cancellationToken);
 
         return new CreateTouchpointScanResponse(
             entity.Id,

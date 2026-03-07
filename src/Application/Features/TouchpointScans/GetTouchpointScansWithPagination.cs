@@ -6,7 +6,7 @@ using Application.Infrastructure.Persistence;
 
 namespace Application.Features.TouchpointScans.GetTouchpointScansWithPagination;
 
-public record TouchpointScanBriefResponse(int Id, int TouchpointId, ChannelType ChannelType);
+public record TouchpointScanBriefResponse(int Id, int TouchpointId, string TouchpointLabel, ChannelType ChannelType, float Latitude, float Longitude, DateTime Created);
 
 [Authorize]
 public record GetTouchpointScansWithPaginationQuery(int? TouchpointId = null, int PageNumber = 1, int PageSize = 10) : IRequest<PaginatedList<TouchpointScanBriefResponse>>;
@@ -17,8 +17,8 @@ internal sealed class GetTouchpointScansWithPaginationQueryHandler(ApplicationDb
     {
         return context.TouchpointScans
             .Where(x => request.TouchpointId == null || x.TouchpointId == request.TouchpointId)
-            .OrderBy(x => x.Id)
-            .Select(x => new TouchpointScanBriefResponse(x.Id, x.TouchpointId, x.ChannelType))
+            .OrderByDescending(x => x.Id)
+            .Select(x => new TouchpointScanBriefResponse(x.Id, x.TouchpointId, x.Touchpoint.Label, x.ChannelType, x.Touchpoint.Latitude, x.Touchpoint.Longitude, x.Created))
             .PaginatedListAsync(request.PageNumber, request.PageSize);
     }
 }

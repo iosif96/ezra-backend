@@ -1,8 +1,10 @@
 ﻿using System.Reflection;
 
 using Api.Filters;
+using Api.Hubs;
 
 using Application;
+using Application.Common.Interfaces;
 
 using FluentValidation;
 using FluentValidation.AspNetCore;
@@ -43,6 +45,14 @@ public static class ConfigureServices
             .UseRecommendedSerializerSettings()
             .UseSqlServerStorage(connectionString));
         services.AddHangfireServer();
+
+        services.AddSignalR()
+            .AddNewtonsoftJsonProtocol(options =>
+            {
+                options.PayloadSerializerSettings.DateTimeZoneHandling = Newtonsoft.Json.DateTimeZoneHandling.Utc;
+                options.PayloadSerializerSettings.Converters.Add(new Newtonsoft.Json.Converters.StringEnumConverter());
+            });
+        services.AddScoped<ITouchpointScanNotifier, TouchpointScanNotifier>();
 
         services.AddSingleton<ApiExceptionFilterAttribute>();
 

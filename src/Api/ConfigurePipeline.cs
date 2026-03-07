@@ -1,4 +1,6 @@
-﻿using Application.Infrastructure.Persistence;
+﻿using Api.Hubs;
+
+using Application.Infrastructure.Persistence;
 
 using Hangfire;
 
@@ -66,6 +68,8 @@ public static class ConfigurePipeline
         app.UseAuthentication();
 
         app.UseAuthorization();
+
+        app.MapHub<TouchpointScanHub>("/hubs/touchpoint-scans");
 
         app.MapControllers();
 
