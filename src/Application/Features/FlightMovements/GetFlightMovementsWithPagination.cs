@@ -10,9 +10,12 @@ namespace Application.Features.FlightMovements.GetFlightMovementsWithPagination;
 
 public record FlightBriefDto(string Number, string IataCode, string Airline, FlightStatus Status);
 
+public record AirportBriefDto(string IataCode, string Name, string City);
+
 public record FlightMovementBriefResponse(
     int Id,
     FlightBriefDto Flight,
+    AirportBriefDto Airport,
     MovementType Type,
     string? Terminal,
     string? Gate,
@@ -29,6 +32,7 @@ internal sealed class GetFlightMovementsWithPaginationQueryHandler(ApplicationDb
     {
         return context.FlightMovements
             .Include(x => x.Flight)
+            .Include(x => x.Airport)
             .Include(x => x.Terminal)
             .Include(x => x.Gate)
             .Where(x => request.FlightId == null || x.FlightId == request.FlightId)
@@ -37,6 +41,7 @@ internal sealed class GetFlightMovementsWithPaginationQueryHandler(ApplicationDb
             .Select(x => new FlightMovementBriefResponse(
                 x.Id,
                 new FlightBriefDto(x.Flight.Number, x.Flight.IataCode, x.Flight.Airline, x.Flight.Status),
+                new AirportBriefDto(x.Airport.IataCode, x.Airport.Name, x.Airport.City),
                 x.Type,
                 x.Terminal != null ? x.Terminal.Code : null,
                 x.Gate != null ? x.Gate.Code : null,
