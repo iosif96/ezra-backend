@@ -78,7 +78,7 @@ public static class ConfigureServices
         // Chat / LLM
         services.AddHttpClient<IChatCompletionService, ClaudeCompletionService>();
         services.AddHttpClient<IMessagingChannel, WhatsAppChannel>();
-        services.AddScoped<ChatPromptBuilder>();
+        services.AddScoped<PromptBuilder>();
         services.AddScoped<IChatTool, CreateRequestTool>();
         services.AddScoped<IChatTool, BindIdentityTool>();
         services.AddScoped<IChatTool, LookupAirportTool>();

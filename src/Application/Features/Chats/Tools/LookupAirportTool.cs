@@ -1,8 +1,8 @@
-using System.Text.Json;
-
 using Application.Infrastructure.Persistence;
 
 using Microsoft.EntityFrameworkCore;
+
+using Newtonsoft.Json.Linq;
 
 namespace Application.Features.Chats.Tools;
 
@@ -14,7 +14,7 @@ public class LookupAirportTool(ApplicationDbContext context) : IChatTool
         "Searches for an airport by IATA code (e.g. 'OTP', 'LHR'), city name (e.g. 'Oradea', 'London'), " +
         "or airport name, and returns its information including terminals, gates, and merchants.";
 
-    public JsonElement InputSchema => JsonDocument.Parse("""
+    public JObject InputSchema => JObject.Parse("""
         {
             "type": "object",
             "properties": {
@@ -25,11 +25,11 @@ public class LookupAirportTool(ApplicationDbContext context) : IChatTool
             },
             "required": ["query"]
         }
-        """).RootElement.Clone();
+        """);
 
-    public async Task<string> ExecuteAsync(JsonElement input, ToolContext toolContext, CancellationToken cancellationToken = default)
+    public async Task<string> ExecuteAsync(JObject input, ToolContext toolContext, CancellationToken cancellationToken = default)
     {
-        var query = input.GetProperty("query").GetString()
+        var query = input.Value<string>("query")
             ?? throw new ArgumentException("Missing 'query' property");
 
         var queryUpper = query.ToUpper();
@@ -49,6 +49,6 @@ public class LookupAirportTool(ApplicationDbContext context) : IChatTool
         if (airport is null)
             return $"No airport found for '{query}'.";
 
-        return ChatInfoBuilder.BuildAirportInfo(airport);
+        return InfoBuilder.BuildAirportInfo(airport);
     }
 }

@@ -2,7 +2,7 @@ using Application.Domain.Entities;
 
 namespace Application.Features.Chats;
 
-public static class ChatInfoBuilder
+public static class InfoBuilder
 {
     public static string BuildAirportInfo(Airport airport)
     {

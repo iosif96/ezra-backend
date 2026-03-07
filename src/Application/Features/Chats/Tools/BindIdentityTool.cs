@@ -1,8 +1,8 @@
-using System.Text.Json;
-
 using Application.Infrastructure.Persistence;
 
 using Microsoft.EntityFrameworkCore;
+
+using Newtonsoft.Json.Linq;
 
 namespace Application.Features.Chats.Tools;
 
@@ -15,7 +15,7 @@ public class BindIdentityTool(ApplicationDbContext context) : IChatTool
         "Use this when the passenger provides their boarding pass code or you extract it from a boarding pass photo. " +
         "This lets you know who the passenger is and access their flight details.";
 
-    public JsonElement InputSchema => JsonDocument.Parse("""
+    public JObject InputSchema => JObject.Parse("""
         {
             "type": "object",
             "properties": {
@@ -26,11 +26,11 @@ public class BindIdentityTool(ApplicationDbContext context) : IChatTool
             },
             "required": ["boarding_pass_code"]
         }
-        """).RootElement.Clone();
+        """);
 
-    public async Task<string> ExecuteAsync(JsonElement input, ToolContext toolContext, CancellationToken cancellationToken = default)
+    public async Task<string> ExecuteAsync(JObject input, ToolContext toolContext, CancellationToken cancellationToken = default)
     {
-        var code = input.GetProperty("boarding_pass_code").GetString()
+        var code = input.Value<string>("boarding_pass_code")
             ?? throw new ArgumentException("Missing 'boarding_pass_code' property");
 
         var boardingPass = await context.BoardingPasses
@@ -60,6 +60,6 @@ public class BindIdentityTool(ApplicationDbContext context) : IChatTool
 
         var identity = boardingPass.Identity;
 
-        return $"Identity bound. Passenger: {identity.PassengerName ?? "Unknown"}, Seat: {boardingPass.Seat ?? "N/A"}\n{ChatInfoBuilder.BuildFlightInfo(boardingPass.Flight)}";
+        return $"Identity bound. Passenger: {identity.PassengerName ?? "Unknown"}, Seat: {boardingPass.Seat ?? "N/A"}\n{InfoBuilder.BuildFlightInfo(boardingPass.Flight)}";
     }
 }

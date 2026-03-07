@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json;
 
 using Application.Common.Interfaces;
 using Application.Common.Models.Chat;
@@ -9,7 +8,6 @@ using Microsoft.Extensions.Logging;
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
 
 namespace Application.Infrastructure.Services.Claude;
 
@@ -21,7 +19,6 @@ public class ClaudeCompletionService : IChatCompletionService
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
     private readonly ILogger<ClaudeCompletionService> _logger;
-    private readonly JsonSerializerSettings _jsonSettings;
 
     public ClaudeCompletionService(
         HttpClient httpClient,
@@ -32,12 +29,6 @@ public class ClaudeCompletionService : IChatCompletionService
         _apiKey = configuration["AnthropicConfiguration:ApiKey"]
             ?? throw new InvalidOperationException("Anthropic API key not configured");
         _logger = logger;
-
-        _jsonSettings = new JsonSerializerSettings
-        {
-            ContractResolver = new CamelCasePropertyNamesContractResolver(),
-            NullValueHandling = NullValueHandling.Ignore,
-        };
     }
 
     public async Task<ChatCompletionResult> CompleteAsync(
@@ -45,7 +36,7 @@ public class ClaudeCompletionService : IChatCompletionService
         CancellationToken cancellationToken = default)
     {
         var claudeRequest = MapToClaudeRequest(request);
-        var json = JsonConvert.SerializeObject(claudeRequest, _jsonSettings);
+        var json = JsonConvert.SerializeObject(claudeRequest);
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, ApiUrl);
         httpRequest.Headers.Add("x-api-key", _apiKey);
@@ -79,7 +70,6 @@ public class ClaudeCompletionService : IChatCompletionService
             Temperature = request.Temperature,
         };
 
-        // System prompt as a cached block
         if (!string.IsNullOrWhiteSpace(request.SystemPrompt))
         {
             claudeRequest.System = new JArray
@@ -129,7 +119,7 @@ public class ClaudeCompletionService : IChatCompletionService
                             ["type"] = "tool_use",
                             ["id"] = toolUse.Id,
                             ["name"] = toolUse.Name,
-                            ["input"] = JToken.Parse(toolUse.Input.GetRawText()),
+                            ["input"] = toolUse.Input,
                         });
                         break;
 
@@ -158,7 +148,7 @@ public class ClaudeCompletionService : IChatCompletionService
             {
                 Name = t.Name,
                 Description = t.Description,
-                InputSchema = JToken.Parse(t.InputSchema.GetRawText()),
+                InputSchema = t.InputSchema,
                 CacheControl = i == request.Tools.Count - 1 ? cacheBreakpoint : null,
             }).ToList();
         }
@@ -179,12 +169,11 @@ public class ClaudeCompletionService : IChatCompletionService
                     break;
 
                 case "tool_use":
-                    var inputJson = block.Input?.ToString() ?? "{}";
                     content.Add(new ToolUseContent
                     {
                         Id = block.Id!,
                         Name = block.Name!,
-                        Input = System.Text.Json.JsonDocument.Parse(inputJson).RootElement.Clone(),
+                        Input = block.Input ?? new JObject(),
                     });
                     break;
             }

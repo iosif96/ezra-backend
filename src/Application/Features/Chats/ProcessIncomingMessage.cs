@@ -21,10 +21,10 @@ public record ProcessIncomingMessageCommand(
 
 internal sealed class ProcessIncomingMessageHandler(
     ApplicationDbContext context,
-    IChatCompletionService chatCompletionService,
+    IChatCompletionService completionService,
     IMessagingChannel messagingChannel,
-    IEnumerable<IChatTool> chatTools,
-    ChatPromptBuilder promptBuilder,
+    IEnumerable<IChatTool> tools,
+    PromptBuilder promptBuilder,
     IConfiguration configuration,
     ILogger<ProcessIncomingMessageHandler> logger) : IRequestHandler<ProcessIncomingMessageCommand>
 {
@@ -34,13 +34,34 @@ internal sealed class ProcessIncomingMessageHandler(
     {
         var conversation = await GetOrCreateConversationAsync(command, cancellationToken);
 
-        // Build user content blocks
-        var userContent = new List<ContentBlock>();
+        var userContent = await BuildUserContentAsync(command, cancellationToken);
+        if (userContent.Count == 0)
+            return;
+
+        var history = await LoadHistoryAsync(conversation.Id, cancellationToken);
+
+        SaveUserMessage(conversation, command);
+        await context.SaveChangesAsync(cancellationToken);
+
+        // Call the LLM with conversation history and tools, running the tool loop if needed
+        var (responseText, inputTokens, outputTokens) =
+            await GetAssistantResponseAsync(conversation, history, userContent, cancellationToken);
+
+        SaveAssistantMessage(conversation, responseText, inputTokens, outputTokens);
+        await context.SaveChangesAsync(cancellationToken);
+
+        await SendReplyAsync(command.ChannelId, responseText, cancellationToken);
+    }
+
+    private async Task<List<ContentBlock>> BuildUserContentAsync(
+        ProcessIncomingMessageCommand command, CancellationToken cancellationToken)
+    {
+        var content = new List<ContentBlock>();
 
         if (command.MediaId is not null)
         {
             var mediaBytes = await messagingChannel.DownloadMediaAsync(command.MediaId, cancellationToken);
-            userContent.Add(new ImageContent
+            content.Add(new ImageContent
             {
                 MediaType = command.MediaMimeType ?? "image/jpeg",
                 Base64Data = Convert.ToBase64String(mediaBytes),
@@ -48,153 +69,156 @@ internal sealed class ProcessIncomingMessageHandler(
         }
 
         if (!string.IsNullOrWhiteSpace(command.Text))
-            userContent.Add(new TextContent { Text = command.Text });
+            content.Add(new TextContent { Text = command.Text });
 
-        if (userContent.Count == 0)
-            return;
+        return content;
+    }
 
-        // Save user message to DB
-        var userMessage = new Message
+    private void SaveUserMessage(Conversation conversation, ProcessIncomingMessageCommand command)
+    {
+        conversation.LastMessageOn = DateTime.UtcNow;
+
+        context.Messages.Add(new Message
         {
             ConversationId = conversation.Id,
             Type = MessageType.User,
             MediaType = command.MediaId is not null ? Domain.Enums.MediaType.Image : Domain.Enums.MediaType.Text,
             Content = command.Text,
             MediaUrl = command.MediaId,
-        };
-        context.Messages.Add(userMessage);
-
-        conversation.LastMessageOn = DateTime.UtcNow;
-        await context.SaveChangesAsync(cancellationToken);
-
-        // Load conversation history and build LLM request
-        var history = await LoadHistoryAsync(conversation.Id, cancellationToken);
-        var systemPrompt = promptBuilder.Build();
-        var model = configuration["AnthropicConfiguration:Model"] ?? "claude-sonnet-4-5-20250514";
-        var tools = chatTools.Select(t => t.ToDefinition()).ToList();
-
-        // Add current user message to history with timestamp
-        userContent.Insert(0, new TextContent
-        {
-            Text = $"[{conversation.LastMessageOn:yyyy-MM-dd HH:mm} UTC]",
         });
+    }
+
+    private async Task<(string Text, int InputTokens, int OutputTokens)> GetAssistantResponseAsync(
+        Conversation conversation, List<ChatMessageDto> history, List<ContentBlock> userContent,
+        CancellationToken cancellationToken)
+    {
+        var model = configuration["AnthropicConfiguration:Model"] ?? "claude-sonnet-4-5-20250514";
+        var toolDefinitions = tools.Select(t => t.ToDefinition()).ToList();
+
+        // Prepend timestamp to user message so the LLM knows when it was sent
+        var timestampedContent = new List<ContentBlock>
+        {
+            new TextContent { Text = $"[{conversation.LastMessageOn:yyyy-MM-dd HH:mm} UTC]" },
+        };
+        timestampedContent.AddRange(userContent);
+
         history.Add(new ChatMessageDto
         {
             Role = ChatMessageRole.User,
-            Content = userContent,
+            Content = timestampedContent,
         });
 
-        // Call LLM (with tool loop)
+        var request = new ChatCompletionRequest
+        {
+            Model = model,
+            SystemPrompt = promptBuilder.Build(),
+            Messages = history,
+            Tools = toolDefinitions.Count > 0 ? toolDefinitions : null,
+            MaxTokens = 4096,
+        };
+
         var totalInputTokens = 0;
         var totalOutputTokens = 0;
 
-        var result = await chatCompletionService.CompleteAsync(new ChatCompletionRequest
-        {
-            Model = model,
-            SystemPrompt = systemPrompt,
-            Messages = history,
-            Tools = tools.Count > 0 ? tools : null,
-            MaxTokens = 4096,
-        }, cancellationToken);
-
+        var result = await completionService.CompleteAsync(request, cancellationToken);
         totalInputTokens += result.InputTokens;
         totalOutputTokens += result.OutputTokens;
 
-        var toolRounds = 0;
-        while (result.RequiresToolUse && toolRounds < MaxToolRounds)
+        // Tool loop: let the LLM call tools and feed results back until it produces a final response
+        var round = 0;
+        while (result.RequiresToolUse && round < MaxToolRounds)
         {
-            toolRounds++;
+            round++;
 
-            // Add assistant message with tool calls to history
             history.Add(new ChatMessageDto
             {
                 Role = ChatMessageRole.Assistant,
                 Content = result.Content,
             });
 
-            // Execute tool calls
-            var toolResults = new List<ContentBlock>();
-            var toolContext = new ToolContext { ConversationId = conversation.Id };
+            var toolResults = await ExecuteToolCallsAsync(result.GetToolCalls(), conversation.Id, cancellationToken);
 
-            foreach (var toolCall in result.GetToolCalls())
-            {
-                var tool = chatTools.FirstOrDefault(t => t.Name == toolCall.Name);
-                string toolOutput;
-
-                if (tool is null)
-                {
-                    logger.LogWarning("Unknown tool requested: {ToolName}", toolCall.Name);
-                    toolOutput = $"Error: Unknown tool '{toolCall.Name}'.";
-                }
-                else
-                {
-                    try
-                    {
-                        toolOutput = await tool.ExecuteAsync(toolCall.Input, toolContext, cancellationToken);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Tool {ToolName} execution failed", toolCall.Name);
-                        toolOutput = $"Error executing tool: {ex.Message}";
-                    }
-                }
-
-                toolResults.Add(new ToolResultContent
-                {
-                    ToolUseId = toolCall.Id,
-                    Content = toolOutput,
-                    IsError = toolOutput.StartsWith("Error"),
-                });
-            }
-
-            // Add tool results as user message and call LLM again
             history.Add(new ChatMessageDto
             {
                 Role = ChatMessageRole.User,
                 Content = toolResults,
             });
 
-            result = await chatCompletionService.CompleteAsync(new ChatCompletionRequest
-            {
-                Model = model,
-                SystemPrompt = systemPrompt,
-                Messages = history,
-                Tools = tools.Count > 0 ? tools : null,
-                MaxTokens = 4096,
-            }, cancellationToken);
-
+            result = await completionService.CompleteAsync(request, cancellationToken);
             totalInputTokens += result.InputTokens;
             totalOutputTokens += result.OutputTokens;
         }
 
-        // Save assistant message to DB
-        var responseText = result.GetText() ?? "";
+        return (result.GetText() ?? "", totalInputTokens, totalOutputTokens);
+    }
 
-        var assistantMessage = new Message
+    private async Task<List<ContentBlock>> ExecuteToolCallsAsync(
+        List<ToolUseContent> toolCalls, int conversationId, CancellationToken cancellationToken)
+    {
+        var results = new List<ContentBlock>();
+        var toolContext = new ToolContext { ConversationId = conversationId };
+
+        foreach (var toolCall in toolCalls)
+        {
+            var tool = tools.FirstOrDefault(t => t.Name == toolCall.Name);
+            string output;
+
+            if (tool is null)
+            {
+                logger.LogWarning("Unknown tool requested: {ToolName}", toolCall.Name);
+                output = $"Error: Unknown tool '{toolCall.Name}'.";
+            }
+            else
+            {
+                try
+                {
+                    output = await tool.ExecuteAsync(toolCall.Input, toolContext, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Tool {ToolName} execution failed", toolCall.Name);
+                    output = $"Error executing tool: {ex.Message}";
+                }
+            }
+
+            results.Add(new ToolResultContent
+            {
+                ToolUseId = toolCall.Id,
+                Content = output,
+                IsError = output.StartsWith("Error"),
+            });
+        }
+
+        return results;
+    }
+
+    private void SaveAssistantMessage(
+        Conversation conversation, string responseText, int inputTokens, int outputTokens)
+    {
+        var model = configuration["AnthropicConfiguration:Model"] ?? "claude-sonnet-4-5-20250514";
+
+        context.Messages.Add(new Message
         {
             ConversationId = conversation.Id,
             Type = MessageType.Assistant,
             MediaType = Domain.Enums.MediaType.Text,
             Content = responseText,
             Model = model,
-            InputTokens = totalInputTokens,
-            OutputTokens = totalOutputTokens,
-        };
-        context.Messages.Add(assistantMessage);
-        await context.SaveChangesAsync(cancellationToken);
+            InputTokens = inputTokens,
+            OutputTokens = outputTokens,
+        });
+    }
 
-        // Split and send response
-        var messageParts = MessageSplitter.SplitIntoMessages(responseText);
+    private async Task SendReplyAsync(string channelId, string text, CancellationToken cancellationToken)
+    {
+        var parts = MessageSplitter.SplitIntoMessages(text);
 
-        foreach (var part in messageParts)
-        {
-            await messagingChannel.SendTextMessageAsync(command.ChannelId, part, cancellationToken);
-        }
+        foreach (var part in parts)
+            await messagingChannel.SendTextMessageAsync(channelId, part, cancellationToken);
     }
 
     private async Task<Conversation> GetOrCreateConversationAsync(
-        ProcessIncomingMessageCommand command,
-        CancellationToken cancellationToken)
+        ProcessIncomingMessageCommand command, CancellationToken cancellationToken)
     {
         var conversation = await context.Conversations
             .FirstOrDefaultAsync(c =>
@@ -225,24 +249,16 @@ internal sealed class ProcessIncomingMessageHandler(
             .OrderBy(m => m.Created)
             .ToListAsync(cancellationToken);
 
-        // Exclude the message we just added (last one) — we'll add it with full content blocks
-        if (messages.Count > 0)
-            messages.RemoveAt(messages.Count - 1);
-
         var history = new List<ChatMessageDto>();
 
         foreach (var msg in messages)
         {
-            var role = msg.Type switch
-            {
-                MessageType.User => ChatMessageRole.User,
-                MessageType.Assistant => ChatMessageRole.Assistant,
-                MessageType.System => ChatMessageRole.User, // System context injected as user messages
-                _ => ChatMessageRole.User,
-            };
-
             if (string.IsNullOrEmpty(msg.Content))
                 continue;
+
+            var role = msg.Type == MessageType.Assistant
+                ? ChatMessageRole.Assistant
+                : ChatMessageRole.User;
 
             var text = role == ChatMessageRole.User
                 ? $"[{msg.Created:yyyy-MM-dd HH:mm} UTC] {msg.Content}"

@@ -1,4 +1,4 @@
-using System.Text.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Application.Common.Models.Chat;
 
@@ -30,35 +30,28 @@ public enum ChatMessageRole
     Assistant,
 }
 
-public abstract class ContentBlock
-{
-    public abstract string Type { get; }
-}
+public abstract class ContentBlock;
 
 public class TextContent : ContentBlock
 {
-    public override string Type => "text";
     public required string Text { get; set; }
 }
 
 public class ImageContent : ContentBlock
 {
-    public override string Type => "image";
     public required string MediaType { get; set; }
     public required string Base64Data { get; set; }
 }
 
 public class ToolUseContent : ContentBlock
 {
-    public override string Type => "tool_use";
     public required string Id { get; set; }
     public required string Name { get; set; }
-    public required JsonElement Input { get; set; }
+    public required JObject Input { get; set; }
 }
 
 public class ToolResultContent : ContentBlock
 {
-    public override string Type => "tool_result";
     public required string ToolUseId { get; set; }
     public required string Content { get; set; }
     public bool IsError { get; set; }
@@ -68,7 +61,7 @@ public class ChatToolDefinition
 {
     public required string Name { get; set; }
     public required string Description { get; set; }
-    public required JsonElement InputSchema { get; set; }
+    public required JObject InputSchema { get; set; }
 }
 
 public class ChatCompletionResult

@@ -4,7 +4,7 @@ namespace Application.Infrastructure.Services.WhatsApp;
 
 // Incoming webhook payload
 
-internal class WhatsAppWebhookPayload
+public class WhatsAppWebhookPayload
 {
     [JsonProperty("object")]
     public string Object { get; set; } = null!;
@@ -13,7 +13,7 @@ internal class WhatsAppWebhookPayload
     public List<WhatsAppEntry> Entry { get; set; } = [];
 }
 
-internal class WhatsAppEntry
+public class WhatsAppEntry
 {
     [JsonProperty("id")]
     public string Id { get; set; } = null!;
@@ -22,7 +22,7 @@ internal class WhatsAppEntry
     public List<WhatsAppChange> Changes { get; set; } = [];
 }
 
-internal class WhatsAppChange
+public class WhatsAppChange
 {
     [JsonProperty("value")]
     public WhatsAppValue Value { get; set; } = null!;
@@ -31,7 +31,7 @@ internal class WhatsAppChange
     public string Field { get; set; } = null!;
 }
 
-internal class WhatsAppValue
+public class WhatsAppValue
 {
     [JsonProperty("messaging_product")]
     public string MessagingProduct { get; set; } = null!;
@@ -49,7 +49,7 @@ internal class WhatsAppValue
     public List<WhatsAppStatus>? Statuses { get; set; }
 }
 
-internal class WhatsAppMetadata
+public class WhatsAppMetadata
 {
     [JsonProperty("display_phone_number")]
     public string DisplayPhoneNumber { get; set; } = null!;
@@ -58,7 +58,7 @@ internal class WhatsAppMetadata
     public string PhoneNumberId { get; set; } = null!;
 }
 
-internal class WhatsAppContact
+public class WhatsAppContact
 {
     [JsonProperty("profile")]
     public WhatsAppProfile Profile { get; set; } = null!;
@@ -67,13 +67,13 @@ internal class WhatsAppContact
     public string WaId { get; set; } = null!;
 }
 
-internal class WhatsAppProfile
+public class WhatsAppProfile
 {
     [JsonProperty("name")]
     public string Name { get; set; } = null!;
 }
 
-internal class WhatsAppMessage
+public class WhatsAppMessage
 {
     [JsonProperty("from")]
     public string From { get; set; } = null!;
@@ -103,13 +103,13 @@ internal class WhatsAppMessage
     public WhatsAppLocation? Location { get; set; }
 }
 
-internal class WhatsAppText
+public class WhatsAppText
 {
     [JsonProperty("body")]
     public string Body { get; set; } = null!;
 }
 
-internal class WhatsAppMedia
+public class WhatsAppMedia
 {
     [JsonProperty("id")]
     public string Id { get; set; } = null!;
@@ -121,7 +121,7 @@ internal class WhatsAppMedia
     public string? Caption { get; set; }
 }
 
-internal class WhatsAppLocation
+public class WhatsAppLocation
 {
     [JsonProperty("latitude")]
     public double Latitude { get; set; }
@@ -136,7 +136,7 @@ internal class WhatsAppLocation
     public string? Address { get; set; }
 }
 
-internal class WhatsAppStatus
+public class WhatsAppStatus
 {
     [JsonProperty("id")]
     public string Id { get; set; } = null!;
@@ -147,7 +147,7 @@ internal class WhatsAppStatus
 
 // Media retrieval response
 
-internal class WhatsAppMediaResponse
+public class WhatsAppMediaResponse
 {
     [JsonProperty("url")]
     public string Url { get; set; } = null!;

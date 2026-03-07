@@ -1,8 +1,8 @@
-using System.Text.Json;
-
 using Application.Domain.Entities;
 using Application.Domain.Enums;
 using Application.Infrastructure.Persistence;
+
+using Newtonsoft.Json.Linq;
 
 namespace Application.Features.Chats.Tools;
 
@@ -15,7 +15,7 @@ public class CreateRequestTool(ApplicationDbContext context) : IChatTool
         "Use this when the passenger needs special assistance (wheelchair, mobility aid), " +
         "wants to be handed off to a human agent, or reports an emergency.";
 
-    public JsonElement InputSchema => JsonDocument.Parse("""
+    public JObject InputSchema => JObject.Parse("""
         {
             "type": "object",
             "properties": {
@@ -31,13 +31,13 @@ public class CreateRequestTool(ApplicationDbContext context) : IChatTool
             },
             "required": ["type", "content"]
         }
-        """).RootElement.Clone();
+        """);
 
-    public async Task<string> ExecuteAsync(JsonElement input, ToolContext toolContext, CancellationToken cancellationToken = default)
+    public async Task<string> ExecuteAsync(JObject input, ToolContext toolContext, CancellationToken cancellationToken = default)
     {
-        var typeString = input.GetProperty("type").GetString()
+        var typeString = input.Value<string>("type")
             ?? throw new ArgumentException("Missing 'type' property");
-        var content = input.GetProperty("content").GetString()
+        var content = input.Value<string>("content")
             ?? throw new ArgumentException("Missing 'content' property");
 
         if (!Enum.TryParse<RequestType>(typeString, out var requestType))

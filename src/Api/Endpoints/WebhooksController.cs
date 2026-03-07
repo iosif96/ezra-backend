@@ -1,10 +1,11 @@
 using Application.Domain.Enums;
 using Application.Features.Chats.ProcessIncomingMessage;
+using Application.Infrastructure.Services.WhatsApp;
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-using Newtonsoft.Json.Linq;
+using Newtonsoft.Json;
 
 namespace Api.Endpoints;
 
@@ -46,87 +47,58 @@ public class WebhooksController : ApiControllerBase
 
         _logger.LogInformation("WhatsApp webhook received: {Body}", body);
 
-        JObject payload;
-        try
-        {
-            payload = JObject.Parse(body);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to parse WhatsApp webhook payload");
-            return BadRequest();
-        }
-
-        var entries = payload["entry"] as JArray;
-        if (entries is null || entries.Count == 0)
-        {
-            _logger.LogWarning("WhatsApp webhook: no entries found");
+        var payload = JsonConvert.DeserializeObject<WhatsAppWebhookPayload>(body);
+        if (payload?.Entry is null || payload.Entry.Count == 0)
             return Ok();
-        }
 
-        foreach (var entry in entries)
+        foreach (var entry in payload.Entry)
+        foreach (var change in entry.Changes)
         {
-            var changes = entry["changes"] as JArray;
-            if (changes is null) continue;
+            if (change.Field != "messages")
+                continue;
 
-            foreach (var change in changes)
+            var messages = change.Value.Messages;
+            if (messages is null || messages.Count == 0)
+                continue;
+
+            var senderName = change.Value.Contacts?.FirstOrDefault()?.Profile.Name;
+
+            foreach (var msg in messages)
             {
-                if (change["field"]?.Value<string>() != "messages") continue;
+                string? text = null;
+                string? mediaId = null;
+                string? mediaMimeType = null;
 
-                var value = change["value"];
-                var messages = value?["messages"] as JArray;
-                if (messages is null || messages.Count == 0)
+                switch (msg.Type)
                 {
-                    _logger.LogInformation("WhatsApp webhook: no messages in change (likely a status update)");
-                    continue;
+                    case "text":
+                        text = msg.Text?.Body;
+                        break;
+
+                    case "image":
+                        mediaId = msg.Image?.Id;
+                        mediaMimeType = msg.Image?.MimeType;
+                        text = msg.Image?.Caption;
+                        break;
+
+                    default:
+                        _logger.LogInformation("Unsupported WhatsApp message type: {Type} from {From}", msg.Type, msg.From);
+                        continue;
                 }
 
-                var contactName = (value?["contacts"] as JArray)?.FirstOrDefault()?["profile"]?["name"]?.Value<string>();
-
-                foreach (var msg in messages)
+                try
                 {
-                    var from = msg["from"]?.Value<string>();
-                    var type = msg["type"]?.Value<string>();
-
-                    if (from is null || type is null) continue;
-
-                    _logger.LogInformation("WhatsApp message from {From}, type: {Type}", from, type);
-
-                    string? text = null;
-                    string? mediaId = null;
-                    string? mediaMimeType = null;
-
-                    switch (type)
-                    {
-                        case "text":
-                            text = msg["text"]?["body"]?.Value<string>();
-                            break;
-
-                        case "image":
-                            mediaId = msg["image"]?["id"]?.Value<string>();
-                            mediaMimeType = msg["image"]?["mime_type"]?.Value<string>();
-                            text = msg["image"]?["caption"]?.Value<string>();
-                            break;
-
-                        default:
-                            _logger.LogInformation("Unsupported WhatsApp message type: {Type} from {From}", type, from);
-                            continue;
-                    }
-
-                    try
-                    {
-                        await Mediator.Send(new ProcessIncomingMessageCommand(
-                            ChannelType: ChannelType.Whatsapp,
-                            ChannelId: from,
-                            Text: text,
-                            MediaId: mediaId,
-                            MediaMimeType: mediaMimeType,
-                            SenderName: contactName));
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Failed to process WhatsApp message from {From}", from);
-                    }
+                    await Mediator.Send(new ProcessIncomingMessageCommand(
+                        ChannelType: ChannelType.Whatsapp,
+                        ChannelId: msg.From,
+                        Text: text,
+                        MediaId: mediaId,
+                        MediaMimeType: mediaMimeType,
+                        SenderName: senderName));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to process WhatsApp message from {From}", msg.From);
                 }
             }
         }

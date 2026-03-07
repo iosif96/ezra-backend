@@ -1,8 +1,8 @@
-using System.Text.Json;
-
 using Application.Infrastructure.Persistence;
 
 using Microsoft.EntityFrameworkCore;
+
+using Newtonsoft.Json.Linq;
 
 namespace Application.Features.Chats.Tools;
 
@@ -14,7 +14,7 @@ public class LookupFlightTool(ApplicationDbContext context) : IChatTool
         "Searches for a flight by flight number (e.g. 'W6 3121', 'BA 283'). " +
         "Returns flight details including status, departure/arrival times, terminals, and gates.";
 
-    public JsonElement InputSchema => JsonDocument.Parse("""
+    public JObject InputSchema => JObject.Parse("""
         {
             "type": "object",
             "properties": {
@@ -25,11 +25,11 @@ public class LookupFlightTool(ApplicationDbContext context) : IChatTool
             },
             "required": ["flight_number"]
         }
-        """).RootElement.Clone();
+        """);
 
-    public async Task<string> ExecuteAsync(JsonElement input, ToolContext toolContext, CancellationToken cancellationToken = default)
+    public async Task<string> ExecuteAsync(JObject input, ToolContext toolContext, CancellationToken cancellationToken = default)
     {
-        var flightNumber = input.GetProperty("flight_number").GetString()
+        var flightNumber = input.Value<string>("flight_number")
             ?? throw new ArgumentException("Missing 'flight_number' property");
 
         var normalized = flightNumber.Replace(" ", "").ToUpper();
@@ -49,6 +49,6 @@ public class LookupFlightTool(ApplicationDbContext context) : IChatTool
         if (flight is null)
             return $"No flight found for '{flightNumber}'.";
 
-        return ChatInfoBuilder.BuildFlightInfo(flight);
+        return InfoBuilder.BuildFlightInfo(flight);
     }
 }

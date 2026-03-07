@@ -1,6 +1,6 @@
 namespace Application.Features.Chats;
 
-public class ChatPromptBuilder
+public class PromptBuilder
 {
     private const string BasePrompt = """
         You are Ezra, a friendly and helpful AI passenger assistant for airports.
