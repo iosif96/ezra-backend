@@ -7,10 +7,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Messages.GetMessage;
 
+public record IdentityDto(int Id, string? PassengerName);
+
+public record ConversationDto(int Id, ChannelType ChannelType, string ChannelId, IdentityDto? Identity);
+
 public record MessageResponse(
-    int Id, int ConversationId, MessageType Type, MediaType MediaType,
+    int Id, ConversationDto Conversation, MessageType Type, MediaType MediaType,
     string? MediaUrl, string? Content, string? Model,
-    int? InputTokens, int? OutputTokens, float? StressIndex);
+    int? InputTokens, int? OutputTokens, float? StressIndex, DateTime Created);
 
 [Authorize]
 public record GetMessageQuery(int Id) : IRequest<MessageResponse>;
@@ -21,10 +25,25 @@ internal sealed class GetMessageQueryHandler(ApplicationDbContext context) : IRe
     {
         var entity = await context.Messages
             .AsNoTracking()
+            .Include(x => x.Conversation).ThenInclude(x => x.Identity)
             .FirstOrDefaultAsync(x => x.Id == request.Id, cancellationToken)
             ?? throw new NotFoundException(nameof(Message), request.Id);
 
-        return new MessageResponse(entity.Id, entity.ConversationId, entity.Type, entity.MediaType,
-            entity.MediaUrl, entity.Content, entity.Model, entity.InputTokens, entity.OutputTokens, entity.StressIndex);
+        return new MessageResponse(
+            entity.Id,
+            new ConversationDto(
+                entity.Conversation.Id,
+                entity.Conversation.ChannelType,
+                entity.Conversation.ChannelId,
+                entity.Conversation.Identity != null ? new IdentityDto(entity.Conversation.Identity.Id, entity.Conversation.Identity.PassengerName) : null),
+            entity.Type,
+            entity.MediaType,
+            entity.MediaUrl,
+            entity.Content,
+            entity.Model,
+            entity.InputTokens,
+            entity.OutputTokens,
+            entity.StressIndex,
+            entity.Created);
     }
 }
