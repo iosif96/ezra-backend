@@ -8,9 +8,20 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Conversations.GetConversationsWithPagination;
 
-public record IdentityDto(int Id, string? PassengerName);
+public record FlightBriefDto(int Id, string Number, string IataCode, string Airline, FlightStatus Status);
 
-public record ConversationBriefResponse(int Id, ChannelType ChannelType, string ChannelId, IdentityDto? Identity, DateTime LastMessageOn, DateTime Created);
+public record BoardingPassBriefDto(string Code, string? Seat, FlightBriefDto Flight);
+
+public record IdentityWithFlightsDto(int Id, string? PassengerName, IReadOnlyList<BoardingPassBriefDto> BoardingPasses);
+
+public record ConversationBriefResponse(
+    int Id,
+    ChannelType ChannelType,
+    string ChannelId,
+    IdentityWithFlightsDto? Identity,
+    int MessageCount,
+    DateTime LastMessageOn,
+    DateTime Created);
 
 [Authorize]
 public record GetConversationsWithPaginationQuery(ChannelType? ChannelType = null, int? IdentityId = null, int PageNumber = 1, int PageSize = 10) : IRequest<PaginatedList<ConversationBriefResponse>>;
@@ -20,7 +31,6 @@ internal sealed class GetConversationsWithPaginationQueryHandler(ApplicationDbCo
     public Task<PaginatedList<ConversationBriefResponse>> Handle(GetConversationsWithPaginationQuery request, CancellationToken cancellationToken)
     {
         return context.Conversations
-            .Include(x => x.Identity)
             .Where(x => request.ChannelType == null || x.ChannelType == request.ChannelType)
             .Where(x => request.IdentityId == null || x.IdentityId == request.IdentityId)
             .OrderByDescending(x => x.LastMessageOn)
@@ -28,7 +38,16 @@ internal sealed class GetConversationsWithPaginationQueryHandler(ApplicationDbCo
                 x.Id,
                 x.ChannelType,
                 x.ChannelId,
-                x.Identity != null ? new IdentityDto(x.Identity.Id, x.Identity.PassengerName) : null,
+                x.Identity != null ? new IdentityWithFlightsDto(
+                    x.Identity.Id,
+                    x.Identity.PassengerName,
+                    x.Identity.BoardingPasses.Select(bp => new BoardingPassBriefDto(
+                        bp.Code,
+                        bp.Seat,
+                        new FlightBriefDto(bp.Flight.Id, bp.Flight.Number, bp.Flight.IataCode, bp.Flight.Airline, bp.Flight.Status)
+                    )).ToList()
+                ) : null,
+                x.Messages.Count,
                 x.LastMessageOn,
                 x.Created))
             .PaginatedListAsync(request.PageNumber, request.PageSize);
