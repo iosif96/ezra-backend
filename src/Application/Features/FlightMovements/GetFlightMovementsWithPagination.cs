@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.FlightMovements.GetFlightMovementsWithPagination;
 
-public record FlightBriefDto(string Number, string IataCode, string Airline, FlightStatus Status);
+public record FlightBriefDto(int Id, string Number, string IataCode, string Airline, FlightStatus Status);
 
 public record AirportBriefDto(string IataCode, string Name, string City);
 
@@ -42,7 +42,7 @@ internal sealed class GetFlightMovementsWithPaginationQueryHandler(ApplicationDb
             .OrderByDescending(x => x.ScheduledOn)
             .Select(x => new FlightMovementBriefResponse(
                 x.Id,
-                new FlightBriefDto(x.Flight.Number, x.Flight.IataCode, x.Flight.Airline, x.Flight.Status),
+                new FlightBriefDto(x.Flight.Id, x.Flight.Number, x.Flight.IataCode, x.Flight.Airline, x.Flight.Status),
                 new AirportBriefDto(x.Airport.IataCode, x.Airport.Name, x.Airport.City),
                 x.Type,
                 x.Terminal != null ? x.Terminal.Code : null,
