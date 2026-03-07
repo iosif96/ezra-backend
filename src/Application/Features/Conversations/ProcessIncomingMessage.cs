@@ -173,16 +173,19 @@ internal sealed class ProcessIncomingMessageHandler(
 
             var toolResults = await ExecuteToolCallsAsync(toolCalls, availableTools, toolContext, cancellationToken);
 
-            // Send tool labels to the user
-            foreach (var toolCall in toolCalls)
+            // Send tool labels to the user (messaging channels only — web handles this client-side via the saved system message)
+            if (conversation.ChannelType != ChannelType.Web)
             {
-                var tool = availableTools.FirstOrDefault(t => t.Name == toolCall.Name);
-                if (tool is not null)
+                foreach (var toolCall in toolCalls)
                 {
-                    var isError = toolResults.OfType<ToolResultContent>()
-                        .FirstOrDefault(r => r.ToolUseId == toolCall.Id)?.IsError ?? false;
-                    var label = isError ? $"> {tool.UserLabel} failed" : $"> {tool.UserLabel}";
-                    await messagingChannel.SendTextMessageAsync(conversation.ChannelId, label, cancellationToken);
+                    var tool = availableTools.FirstOrDefault(t => t.Name == toolCall.Name);
+                    if (tool is not null)
+                    {
+                        var isError = toolResults.OfType<ToolResultContent>()
+                            .FirstOrDefault(r => r.ToolUseId == toolCall.Id)?.IsError ?? false;
+                        var label = isError ? $"> {tool.UserLabel} failed" : $"> {tool.UserLabel}";
+                        await messagingChannel.SendTextMessageAsync(conversation.ChannelId, label, cancellationToken);
+                    }
                 }
             }
 

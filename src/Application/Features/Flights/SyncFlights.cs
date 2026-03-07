@@ -3,6 +3,7 @@ using Application.Common.Models.AviationStack;
 using Application.Common.Security;
 using Application.Domain.Entities;
 using Application.Domain.Enums;
+using Application.Features.Events.ProcessEvent;
 using Application.Infrastructure.Persistence;
 
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +18,7 @@ public record SyncFlightsCommand(int AirportId) : IRequest<SyncFlightsResponse>;
 internal sealed class SyncFlightsCommandHandler(
     ApplicationDbContext context,
     IAviationStackService aviationStack,
+    ISender sender,
     ILogger<SyncFlightsCommandHandler> logger) : IRequestHandler<SyncFlightsCommand, SyncFlightsResponse>
 {
     public async Task<SyncFlightsResponse> Handle(SyncFlightsCommand request, CancellationToken cancellationToken)
@@ -71,14 +73,22 @@ internal sealed class SyncFlightsCommandHandler(
 
         var created = 0;
         var updated = 0;
+        var detectedEvents = new List<Event>();
 
         foreach (var p in parsed)
         {
             if (existingLookup.TryGetValue((p.FlightNumber, p.FlightDate), out var existing))
             {
+                var changes = DetectChanges(existing, p, airport.Id, terminals, gates);
                 ApplyUpdate(existing, p);
                 UpsertMovement(existing, p, airport.Id, terminals, gates);
                 updated++;
+
+                foreach (var change in changes)
+                {
+                    change.FlightId = existing.Id;
+                    detectedEvents.Add(change);
+                }
             }
             else
             {
@@ -89,11 +99,29 @@ internal sealed class SyncFlightsCommandHandler(
             }
         }
 
+        if (detectedEvents.Count > 0)
+        {
+            context.Events.AddRange(detectedEvents);
+        }
+
         await context.SaveChangesAsync(cancellationToken);
 
+        // Process events — notify passengers via AI
+        foreach (var ev in detectedEvents)
+        {
+            try
+            {
+                await sender.Send(new ProcessEventCommand(ev.Id), cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to process event {EventId} for flight sync", ev.Id);
+            }
+        }
+
         logger.LogInformation(
-            "Sync complete for {Airport}: {Created} created, {Updated} updated",
-            airport.IataCode, created, updated);
+            "Sync complete for {Airport}: {Created} created, {Updated} updated, {Events} events",
+            airport.IataCode, created, updated, detectedEvents.Count);
 
         return new SyncFlightsResponse(created, updated);
     }
@@ -177,6 +205,101 @@ internal sealed class SyncFlightsCommandHandler(
         }
 
         return first;
+    }
+
+    private static List<Event> DetectChanges(Flight flight, ParsedFlight p, int airportId,
+        Dictionary<string, int> terminals, Dictionary<string, int> gates)
+    {
+        var events = new List<Event>();
+
+        // Status change (e.g. Scheduled → Cancelled, Scheduled → Active)
+        if (p.Status != FlightStatus.Unknown && p.Status != flight.Status)
+        {
+            var eventType = p.Status switch
+            {
+                FlightStatus.Cancelled => EventType.Cancellation,
+                FlightStatus.Diverted => EventType.Diversion,
+                _ => EventType.Custom,
+            };
+
+            events.Add(new Event
+            {
+                Type = eventType,
+                Content = $"Flight status changed from {flight.Status} to {p.Status}",
+            });
+        }
+
+        // Check each movement direction for changes
+        DetectMovementChanges(events, flight, MovementType.Departure, p.DepartureData, airportId, terminals, gates);
+        DetectMovementChanges(events, flight, MovementType.Arrival, p.ArrivalData, airportId, terminals, gates);
+
+        return events;
+    }
+
+    private static void DetectMovementChanges(List<Event> events, Flight flight, MovementType type,
+        AviationStackMovement? data, int airportId,
+        Dictionary<string, int> terminals, Dictionary<string, int> gates)
+    {
+        if (data?.Scheduled is null)
+        {
+            return;
+        }
+
+        var existing = flight.Movements.FirstOrDefault(m => m.Type == type && m.AirportId == airportId);
+        if (existing is null)
+        {
+            return;
+        }
+
+        var direction = type == MovementType.Departure ? "departure" : "arrival";
+
+        // Gate change
+        if (!string.IsNullOrWhiteSpace(data.Gate) && gates.TryGetValue(data.Gate, out var newGateId))
+        {
+            if (existing.GateId != newGateId)
+            {
+                events.Add(new Event
+                {
+                    Type = EventType.GateChanged,
+                    Content = $"The {direction} gate has changed to {data.Gate}",
+                });
+            }
+        }
+
+        // Terminal change
+        if (!string.IsNullOrWhiteSpace(data.Terminal) && terminals.TryGetValue(data.Terminal, out var newTerminalId))
+        {
+            if (existing.TerminalId != newTerminalId)
+            {
+                events.Add(new Event
+                {
+                    Type = EventType.Custom,
+                    Content = $"The {direction} terminal has changed to {data.Terminal}",
+                });
+            }
+        }
+
+        // Schedule change (delay)
+        if (data.Estimated.HasValue && existing.EstimatedOn != data.Estimated)
+        {
+            var delay = data.Estimated.Value - data.Scheduled.Value;
+            if (delay.TotalMinutes > 5)
+            {
+                events.Add(new Event
+                {
+                    Type = EventType.Delay,
+                    Content = $"The {direction} has been delayed. New estimated time: {data.Estimated.Value:HH:mm} UTC (delayed by {(int)delay.TotalMinutes} minutes)",
+                });
+            }
+            else if (existing.EstimatedOn.HasValue && !data.Estimated.HasValue)
+            {
+                events.Add(new Event
+                {
+                    Type = EventType.Custom,
+                    Content = $"The {direction} delay has been cleared. Back on schedule at {data.Scheduled.Value:HH:mm} UTC",
+                });
+            }
+        }
     }
 
     private static Flight CreateFlight(ParsedFlight p)

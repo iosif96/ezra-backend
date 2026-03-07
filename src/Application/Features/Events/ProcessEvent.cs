@@ -1,6 +1,6 @@
-using Application.Common.Interfaces;
 using Application.Domain.Entities;
 using Application.Domain.Enums;
+using Application.Features.Conversations.SendSystemNotification;
 using Application.Infrastructure.Persistence;
 
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +12,7 @@ public record ProcessEventCommand(int EventId) : IRequest;
 
 internal sealed class ProcessEventHandler(
     ApplicationDbContext context,
-    IMessagingChannel messagingChannel,
+    ISender sender,
     ILogger<ProcessEventHandler> logger) : IRequestHandler<ProcessEventCommand>
 {
     public async Task Handle(ProcessEventCommand command, CancellationToken cancellationToken)
@@ -49,28 +49,17 @@ internal sealed class ProcessEventHandler(
 
         foreach (var conversation in conversations)
         {
-            // Save notification message to DB
-            context.Messages.Add(new Message
-            {
-                ConversationId = conversation.Id,
-                EventId = ev.Id,
-                Type = MessageType.System,
-                MediaType = MediaType.Text,
-                Content = ev.Content,
-            });
-
-            // Send via messaging channel
             try
             {
-                await messagingChannel.SendTextMessageAsync(conversation.ChannelId, ev.Content, cancellationToken);
+                await sender.Send(new SendSystemNotificationCommand(
+                    conversation.Id,
+                    $"[System: Flight update for {ev.Flight!.Number} — {ev.Content}. Inform the passenger about this update.]"), cancellationToken);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Event {EventId}: failed to send to conversation {ConversationId}",
+                logger.LogError(ex, "Event {EventId}: failed to notify conversation {ConversationId}",
                     command.EventId, conversation.Id);
             }
         }
-
-        await context.SaveChangesAsync(cancellationToken);
     }
 }
