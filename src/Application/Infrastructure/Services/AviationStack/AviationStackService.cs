@@ -35,22 +35,27 @@ public class AviationStackService : IAviationStackService
         var allFlights = new List<AviationStackFlight>();
         var offset = 0;
         const int limit = 100;
+        const int maxPages = 10;
 
         _logger.LogInformation(
             "AviationStack sync started: {Direction} {Airport}",
             direction, airportIata);
 
-        while (true)
+        for (var page = 0; page < maxPages; page++)
         {
             var response = await FetchPageAsync(directionParam, airportIata, limit, offset, cancellationToken);
 
             if (response.Data == null || response.Data.Count == 0)
+            {
                 break;
+            }
 
             allFlights.AddRange(response.Data);
 
             if (allFlights.Count >= response.Pagination.Total)
+            {
                 break;
+            }
 
             offset += limit;
         }
