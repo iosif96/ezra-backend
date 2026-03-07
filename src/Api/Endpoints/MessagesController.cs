@@ -14,7 +14,7 @@ namespace Api.Endpoints;
 public class MessagesController : ApiControllerBase
 {
     [HttpPost]
-    public async Task<ActionResult<int>> Create(CreateMessage.CreateMessageCommand command)
+    public async Task<ActionResult<CreateMessage.CreateMessageResponse>> Create(CreateMessage.CreateMessageCommand command)
     {
         return await Mediator.Send(command);
     }
