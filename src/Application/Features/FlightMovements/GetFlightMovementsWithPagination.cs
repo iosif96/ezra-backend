@@ -19,6 +19,8 @@ public record FlightMovementBriefResponse(
     MovementType Type,
     string? Terminal,
     string? Gate,
+    DateTime? BoardingOn,
+    DateTime? GateCloseOn,
     DateTime ScheduledOn,
     DateTime? EstimatedOn,
     DateTime? ActualOn);
@@ -45,6 +47,8 @@ internal sealed class GetFlightMovementsWithPaginationQueryHandler(ApplicationDb
                 x.Type,
                 x.Terminal != null ? x.Terminal.Code : null,
                 x.Gate != null ? x.Gate.Code : null,
+                x.BoardingOn,
+                x.GateCloseOn,
                 x.ScheduledOn,
                 x.EstimatedOn,
                 x.ActualOn))
