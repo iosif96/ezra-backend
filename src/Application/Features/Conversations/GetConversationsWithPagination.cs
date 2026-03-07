@@ -8,8 +8,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Conversations.GetConversationsWithPagination;
 
-public record IdentityBriefDto(int Id, string? PassengerName);
-
 public record FlightBriefDto(int Id, string Number, string IataCode, string Airline, FlightStatus Status);
 
 public record BoardingPassBriefDto(string Code, string? Seat, FlightBriefDto Flight);
@@ -22,7 +20,6 @@ public record ConversationBriefResponse(
     string ChannelId,
     IdentityWithFlightsDto? Identity,
     int MessageCount,
-    string? LastMessagePreview,
     DateTime LastMessageOn,
     DateTime Created);
 
@@ -51,7 +48,6 @@ internal sealed class GetConversationsWithPaginationQueryHandler(ApplicationDbCo
                     )).ToList()
                 ) : null,
                 x.Messages.Count,
-                x.Messages.OrderByDescending(m => m.Id).Select(m => m.Content).FirstOrDefault(),
                 x.LastMessageOn,
                 x.Created))
             .PaginatedListAsync(request.PageNumber, request.PageSize);
