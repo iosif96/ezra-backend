@@ -1,10 +1,11 @@
+using Application.Features.Conversations.Prompts;
 using Application.Infrastructure.Persistence;
 
 using Microsoft.EntityFrameworkCore;
 
 using Newtonsoft.Json.Linq;
 
-namespace Application.Features.Chats.Tools;
+namespace Application.Features.Conversations.Tools;
 
 public class BindIdentityTool(ApplicationDbContext context) : IChatTool
 {
@@ -37,29 +38,53 @@ public class BindIdentityTool(ApplicationDbContext context) : IChatTool
             .Include(bp => bp.Identity)
             .Include(bp => bp.Flight)
                 .ThenInclude(f => f.Movements)
-                    .ThenInclude(m => m.Gate)
+                    .ThenInclude(m => m.Airport)
+                        .ThenInclude(a => a.Terminals)
+                            .ThenInclude(t => t.Gates)
+            .Include(bp => bp.Flight)
+                .ThenInclude(f => f.Movements)
+                    .ThenInclude(m => m.Airport)
+                        .ThenInclude(a => a.Terminals)
+                            .ThenInclude(t => t.Merchants)
             .Include(bp => bp.Flight)
                 .ThenInclude(f => f.Movements)
                     .ThenInclude(m => m.Terminal)
             .Include(bp => bp.Flight)
                 .ThenInclude(f => f.Movements)
-                    .ThenInclude(m => m.Airport)
+                    .ThenInclude(m => m.Gate)
             .FirstOrDefaultAsync(bp => bp.Code == code, cancellationToken);
 
         if (boardingPass is null)
+        {
             return $"No boarding pass found with code '{code}'.";
+        }
 
-        var conversation = await context.Conversations
-            .FirstOrDefaultAsync(c => c.Id == toolContext.ConversationId, cancellationToken);
-
+        // Bind the passenger identity to this conversation
+        var conversation = await context.Conversations.FindAsync([toolContext.ConversationId], cancellationToken);
         if (conversation is null)
+        {
             return "Error: conversation not found.";
+        }
 
         conversation.IdentityId = boardingPass.IdentityId;
         await context.SaveChangesAsync(cancellationToken);
 
         var identity = boardingPass.Identity;
+        var flight = boardingPass.Flight;
 
-        return $"Identity bound. Passenger: {identity.PassengerName ?? "Unknown"}, Seat: {boardingPass.Seat ?? "N/A"}\n{InfoBuilder.BuildFlightInfo(boardingPass.Flight)}";
+        var result = $"Passenger: {identity.PassengerName ?? "Unknown"}, Seat: {boardingPass.Seat ?? "N/A"}";
+        result += $"\n{InfoBuilder.BuildFlightInfo(flight)}";
+
+        // Include info for each airport involved in the flight
+        var airports = flight.Movements
+            .Select(m => m.Airport)
+            .DistinctBy(a => a.Id);
+
+        foreach (var airport in airports)
+        {
+            result += $"\n{InfoBuilder.BuildAirportInfo(airport)}";
+        }
+
+        return result;
     }
 }

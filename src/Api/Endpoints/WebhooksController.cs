@@ -1,5 +1,5 @@
 using Application.Domain.Enums;
-using Application.Features.Chats.ProcessIncomingMessage;
+using Application.Features.Conversations.ProcessIncomingMessage;
 using Application.Infrastructure.Services.WhatsApp;
 
 using Microsoft.AspNetCore.Authorization;

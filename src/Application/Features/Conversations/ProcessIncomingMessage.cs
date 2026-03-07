@@ -2,14 +2,15 @@ using Application.Common.Interfaces;
 using Application.Common.Models.Chat;
 using Application.Domain.Entities;
 using Application.Domain.Enums;
-using Application.Features.Chats.Tools;
+using Application.Features.Conversations.Prompts;
+using Application.Features.Conversations.Tools;
 using Application.Infrastructure.Persistence;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
-namespace Application.Features.Chats.ProcessIncomingMessage;
+namespace Application.Features.Conversations.ProcessIncomingMessage;
 
 public record ProcessIncomingMessageCommand(
     ChannelType ChannelType,
@@ -36,7 +37,9 @@ internal sealed class ProcessIncomingMessageHandler(
 
         var userContent = await BuildUserContentAsync(command, cancellationToken);
         if (userContent.Count == 0)
+        {
             return;
+        }
 
         var history = await LoadHistoryAsync(conversation.Id, cancellationToken);
 
@@ -69,7 +72,9 @@ internal sealed class ProcessIncomingMessageHandler(
         }
 
         if (!string.IsNullOrWhiteSpace(command.Text))
+        {
             content.Add(new TextContent { Text = command.Text });
+        }
 
         return content;
     }
@@ -93,7 +98,9 @@ internal sealed class ProcessIncomingMessageHandler(
         CancellationToken cancellationToken)
     {
         var model = configuration["AnthropicConfiguration:Model"] ?? "claude-sonnet-4-5-20250514";
-        var toolDefinitions = tools.Select(t => t.ToDefinition()).ToList();
+        var toolContext = new ToolContext { ConversationId = conversation.Id, IdentityId = conversation.IdentityId };
+        var availableTools = tools.Where(t => t.IsAvailable(toolContext)).ToList();
+        var toolDefinitions = availableTools.Select(t => t.ToDefinition()).ToList();
 
         // Prepend timestamp to user message so the LLM knows when it was sent
         var timestampedContent = new List<ContentBlock>
@@ -136,7 +143,7 @@ internal sealed class ProcessIncomingMessageHandler(
                 Content = result.Content,
             });
 
-            var toolResults = await ExecuteToolCallsAsync(result.GetToolCalls(), conversation.Id, cancellationToken);
+            var toolResults = await ExecuteToolCallsAsync(result.GetToolCalls(), availableTools, toolContext, cancellationToken);
 
             history.Add(new ChatMessageDto
             {
@@ -153,14 +160,14 @@ internal sealed class ProcessIncomingMessageHandler(
     }
 
     private async Task<List<ContentBlock>> ExecuteToolCallsAsync(
-        List<ToolUseContent> toolCalls, int conversationId, CancellationToken cancellationToken)
+        List<ToolUseContent> toolCalls, List<IChatTool> availableTools, ToolContext toolContext,
+        CancellationToken cancellationToken)
     {
         var results = new List<ContentBlock>();
-        var toolContext = new ToolContext { ConversationId = conversationId };
 
         foreach (var toolCall in toolCalls)
         {
-            var tool = tools.FirstOrDefault(t => t.Name == toolCall.Name);
+            var tool = availableTools.FirstOrDefault(t => t.Name == toolCall.Name);
             string output;
 
             if (tool is null)
@@ -214,7 +221,9 @@ internal sealed class ProcessIncomingMessageHandler(
         var parts = MessageSplitter.SplitIntoMessages(text);
 
         foreach (var part in parts)
+        {
             await messagingChannel.SendTextMessageAsync(channelId, part, cancellationToken);
+        }
     }
 
     private async Task<Conversation> GetOrCreateConversationAsync(
@@ -227,7 +236,9 @@ internal sealed class ProcessIncomingMessageHandler(
                 cancellationToken);
 
         if (conversation is not null)
+        {
             return conversation;
+        }
 
         conversation = new Conversation
         {
@@ -254,7 +265,9 @@ internal sealed class ProcessIncomingMessageHandler(
         foreach (var msg in messages)
         {
             if (string.IsNullOrEmpty(msg.Content))
+            {
                 continue;
+            }
 
             var role = msg.Type == MessageType.Assistant
                 ? ChatMessageRole.Assistant

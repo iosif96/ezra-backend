@@ -4,7 +4,7 @@ using Application.Infrastructure.Persistence;
 
 using Newtonsoft.Json.Linq;
 
-namespace Application.Features.Chats.Tools;
+namespace Application.Features.Conversations.Tools;
 
 public class CreateRequestTool(ApplicationDbContext context) : IChatTool
 {
@@ -14,6 +14,8 @@ public class CreateRequestTool(ApplicationDbContext context) : IChatTool
         "Creates a service request on behalf of the passenger. " +
         "Use this when the passenger needs special assistance (wheelchair, mobility aid), " +
         "wants to be handed off to a human agent, or reports an emergency.";
+
+    public bool IsAvailable(ToolContext context) => context.IdentityId is not null;
 
     public JObject InputSchema => JObject.Parse("""
         {
@@ -41,7 +43,9 @@ public class CreateRequestTool(ApplicationDbContext context) : IChatTool
             ?? throw new ArgumentException("Missing 'content' property");
 
         if (!Enum.TryParse<RequestType>(typeString, out var requestType))
+        {
             return $"Error: Invalid request type '{typeString}'.";
+        }
 
         var entity = new Request
         {

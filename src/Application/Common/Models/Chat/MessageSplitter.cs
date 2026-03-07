@@ -7,7 +7,9 @@ public static partial class MessageSplitter
     public static List<string> SplitIntoMessages(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
+        {
             return [];
+        }
 
         // First split on double newlines (paragraphs)
         var paragraphs = text.Split(["\n\n", "\r\n\r\n"], StringSplitOptions.RemoveEmptyEntries);
@@ -18,7 +20,9 @@ public static partial class MessageSplitter
         {
             var trimmed = paragraph.Trim();
             if (string.IsNullOrWhiteSpace(trimmed))
+            {
                 continue;
+            }
 
             // If paragraph is short enough, keep it as one message
             if (trimmed.Length <= 200)
@@ -35,7 +39,9 @@ public static partial class MessageSplitter
             {
                 var s = sentence.Trim();
                 if (string.IsNullOrWhiteSpace(s))
+                {
                     continue;
+                }
 
                 // Group short consecutive sentences together
                 if (current.Length > 0 && current.Length + s.Length + 1 <= 200)
@@ -45,13 +51,17 @@ public static partial class MessageSplitter
                 else
                 {
                     if (current.Length > 0)
+                    {
                         messages.Add(current);
+                    }
                     current = s;
                 }
             }
 
             if (current.Length > 0)
+            {
                 messages.Add(current);
+            }
         }
 
         return messages;

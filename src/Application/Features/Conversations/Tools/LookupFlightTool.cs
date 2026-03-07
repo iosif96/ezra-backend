@@ -1,10 +1,11 @@
+using Application.Features.Conversations.Prompts;
 using Application.Infrastructure.Persistence;
 
 using Microsoft.EntityFrameworkCore;
 
 using Newtonsoft.Json.Linq;
 
-namespace Application.Features.Chats.Tools;
+namespace Application.Features.Conversations.Tools;
 
 public class LookupFlightTool(ApplicationDbContext context) : IChatTool
 {
@@ -47,7 +48,9 @@ public class LookupFlightTool(ApplicationDbContext context) : IChatTool
                 cancellationToken);
 
         if (flight is null)
+        {
             return $"No flight found for '{flightNumber}'.";
+        }
 
         return InfoBuilder.BuildFlightInfo(flight);
     }
