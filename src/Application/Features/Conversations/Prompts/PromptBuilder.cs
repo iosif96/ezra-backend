@@ -34,6 +34,14 @@ public class PromptBuilder
         - For special assistance, confirm the type of help needed before creating a request.
         - If a passenger seems stressed or frustrated, acknowledge their feelings before problem-solving.
         - Do not spam the user with "What else can I help you with?" sentences
+
+        Analytics (MANDATORY on every response):
+        - You MUST end every response with a metrics line in this exact format:
+        [metrics:stress=X.X,satisfaction=X.X]
+        - stress: 0.0 (calm) to 1.0 (extremely stressed), based on the passenger's emotional state in the conversation
+        - satisfaction: 0.0 (very dissatisfied) to 1.0 (very satisfied), based on how well the passenger's needs are being met
+        - This line will be stripped before sending to the passenger — they will never see it
+        - Always include it, even on the first message. Estimate from context.
         """;
 
     public string Build() => BasePrompt;

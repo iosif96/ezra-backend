@@ -6,6 +6,7 @@ using CreateConversation = Application.Features.Conversations.CreateConversation
 using DeleteConversation = Application.Features.Conversations.DeleteConversation;
 using GetConversation = Application.Features.Conversations.GetConversation;
 using GetConversationsWithPagination = Application.Features.Conversations.GetConversationsWithPagination;
+using ResetConversation = Application.Features.Conversations.ResetConversation;
 using UpdateConversation = Application.Features.Conversations.UpdateConversation;
 
 namespace Api.Endpoints;
@@ -38,6 +39,14 @@ public class ConversationsController : ApiControllerBase
             return BadRequest();
 
         await Mediator.Send(command);
+
+        return NoContent();
+    }
+
+    [HttpPost("{id}/reset")]
+    public async Task<ActionResult> Reset(int id)
+    {
+        await Mediator.Send(new ResetConversation.ResetConversationCommand(id));
 
         return NoContent();
     }

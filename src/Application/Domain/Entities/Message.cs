@@ -19,4 +19,5 @@ public class Message : AuditableEntity
     public int? InputTokens { get; set; }
     public int? OutputTokens { get; set; }
     public float? StressIndex { get; set; }
+    public float? SatisfactionIndex { get; set; }
 }

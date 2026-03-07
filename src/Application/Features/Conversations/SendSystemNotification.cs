@@ -52,7 +52,9 @@ internal sealed class SendSystemNotificationHandler(
 
         // Load history and get AI response
         var history = await LoadHistoryAsync(conversation.Id, cancellationToken);
-        var (responseText, inputTokens, outputTokens) = await GetAssistantResponseAsync(conversation, history, cancellationToken);
+        var (rawText, inputTokens, outputTokens) = await GetAssistantResponseAsync(conversation, history, cancellationToken);
+
+        var (responseText, metrics) = MetricsParser.Parse(rawText);
 
         // Save the assistant message
         var model = configuration["AnthropicConfiguration:Model"] ?? "claude-sonnet-4-5-20250514";
@@ -66,6 +68,8 @@ internal sealed class SendSystemNotificationHandler(
             Model = model,
             InputTokens = inputTokens,
             OutputTokens = outputTokens,
+            StressIndex = metrics.Stress,
+            SatisfactionIndex = metrics.Satisfaction,
         });
 
         await context.SaveChangesAsync(cancellationToken);

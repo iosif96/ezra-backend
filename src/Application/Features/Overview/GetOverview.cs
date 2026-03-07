@@ -129,19 +129,19 @@ internal sealed class GetOverviewQueryHandler(ApplicationDbContext context) : IR
 
     private async Task<ChartsOverview> GetChartsOverview(DateTime thirtyDaysAgo, CancellationToken cancellationToken)
     {
-        var rawSatisfaction = await context.Feedbacks
-            .Where(f => f.Created >= thirtyDaysAgo)
-            .GroupBy(f => f.Created.Date)
-            .Select(g => new { Date = g.Key, Avg = g.Average(f => f.Rating), Count = g.Count() })
+        var rawSatisfaction = await context.Messages
+            .Where(m => m.Created >= thirtyDaysAgo && m.SatisfactionIndex != null)
+            .GroupBy(m => m.Created.Date)
+            .Select(g => new { Date = g.Key, Avg = g.Average(m => (double)m.SatisfactionIndex!), Count = g.Count() })
             .OrderBy(x => x.Date)
             .ToListAsync(cancellationToken);
 
         var satisfactionData = rawSatisfaction
-            .Select(x => new SatisfactionDataPoint(DateOnly.FromDateTime(x.Date), Math.Round(x.Avg, 1), x.Count))
+            .Select(x => new SatisfactionDataPoint(DateOnly.FromDateTime(x.Date), Math.Round(x.Avg, 2), x.Count))
             .ToList();
 
         var satisfactionAverage = satisfactionData.Count > 0
-            ? Math.Round(satisfactionData.Average(x => x.AverageRating), 1)
+            ? Math.Round(satisfactionData.Average(x => x.AverageRating), 2)
             : (double?)null;
 
         var rawStress = await context.Messages

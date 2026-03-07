@@ -53,10 +53,12 @@ internal sealed class ProcessIncomingMessageHandler(
         }
 
         // Call the LLM with conversation history and tools, running the tool loop if needed
-        var (responseText, inputTokens, outputTokens) =
+        var (rawText, inputTokens, outputTokens) =
             await GetAssistantResponseAsync(conversation, history, cancellationToken);
 
-        SaveAssistantMessage(conversation, responseText, inputTokens, outputTokens);
+        var (responseText, metrics) = MetricsParser.Parse(rawText);
+
+        SaveAssistantMessage(conversation, responseText, inputTokens, outputTokens, metrics);
         await context.SaveChangesAsync(cancellationToken);
 
         await BroadcastConversationUpdate(cancellationToken);
@@ -253,7 +255,7 @@ internal sealed class ProcessIncomingMessageHandler(
     }
 
     private void SaveAssistantMessage(
-        Conversation conversation, string responseText, int inputTokens, int outputTokens)
+        Conversation conversation, string responseText, int inputTokens, int outputTokens, MessageMetrics? metrics = null)
     {
         var model = configuration["AnthropicConfiguration:Model"] ?? "claude-sonnet-4-5-20250514";
 
@@ -266,6 +268,8 @@ internal sealed class ProcessIncomingMessageHandler(
             Model = model,
             InputTokens = inputTokens,
             OutputTokens = outputTokens,
+            StressIndex = metrics?.Stress,
+            SatisfactionIndex = metrics?.Satisfaction,
         });
     }
 
