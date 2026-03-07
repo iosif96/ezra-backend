@@ -20,11 +20,7 @@ public static class ConfigureServices
             .AddNewtonsoftJson(options =>
             {
                 options.SerializerSettings.DateTimeZoneHandling = Newtonsoft.Json.DateTimeZoneHandling.Utc;
-                // This tells Newtonsoft.Json:
-                // 1. If DateTime.Kind is Unspecified, assume it's UTC.
-                // 2. If DateTime.Kind is Local, convert it to UTC before serializing.
-                // 3. If DateTime.Kind is Utc, serialize as UTC.
-                // It will append 'Z' for UTC times.
+                options.SerializerSettings.Converters.Add(new Newtonsoft.Json.Converters.StringEnumConverter());
             });
         services.AddEndpointsApiExplorer();
 
